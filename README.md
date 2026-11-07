@@ -2,7 +2,9 @@
 
 Homebridge plugin that opens a **Tuya Gate Camera / video intercom** from Apple Home.
 
-It sends the same command the Tuya app uses for **Lock Switch**: pulse `accessory_lock` (`true`). Your device (DP **148**) opens the gate and returns to locked on its own.
+It sends the same action the Tuya app uses for **Lock Switch**: pulse `accessory_lock` (`true`) via the Tuya **v2 shadow properties** API (Gate Cameras reject the older v1 commands API with error 2008). Your device (DP **148**) opens the gate and returns to locked on its own.
+
+By default the plugin also tries a short **camera stream allocate** before open — some intercoms only accept the lock pulse after that.
 
 ## What you get in Home
 
@@ -42,7 +44,8 @@ Restart Homebridge, then add **Tuya Gate** from the Plugins page.
       "deviceId": "bf3f24408fb356db59qioh",
       "region": "eu",
       "lockCode": "accessory_lock",
-      "showSwitch": false
+      "showSwitch": false,
+      "warmupStream": true
     }
   ]
 }
@@ -52,6 +55,8 @@ Restart Homebridge, then add **Tuya Gate** from the Plugins page.
 |--------|---------|
 | `showSwitch: false` (default) | Only the **Lock** appears in Home |
 | `showSwitch: true` | **Lock** and a momentary **Switch** (same open command) |
+| `warmupStream: true` (default) | Allocate a short RTSP session before open (helps some Gate Cameras) |
+| `lockCode` | Default `accessory_lock`. Try `ipc_c_lock` if open still fails |
 
 `region` must match the project data center (`eu` for `openapi.tuyaeu.com`).
 

@@ -29,6 +29,7 @@ export class TuyaGatePlatform implements DynamicPlatformPlugin {
         deviceId: String(cfg.deviceId || ''),
         region: String(cfg.region || DEFAULT_REGION),
         lockCode: String(cfg.lockCode || DEFAULT_LOCK_CODE),
+        warmupStream: cfg.warmupStream !== false,
       }),
   ) {
     this.Service = api.hap.Service;

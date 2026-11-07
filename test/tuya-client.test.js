@@ -3,7 +3,7 @@ const test = require('node:test');
 
 const { TuyaClient, TuyaApiError } = require('../dist/tuya-client');
 
-test('openGate requests a token then sends accessory_lock true', async () => {
+test('openGate uses v2 shadow properties issue, not v1 commands', async () => {
   const calls = [];
   const fetchImpl = async (url, init = {}) => {
     calls.push({ url, method: init.method, body: init.body, headers: init.headers });
@@ -13,7 +13,10 @@ test('openGate requests a token then sends accessory_lock true', async () => {
         result: { access_token: 'tok', expire_time: 7200 },
       });
     }
-    return jsonResponse({ success: true, result: true });
+    if (String(url).includes('/stream/actions/allocate')) {
+      return jsonResponse({ success: true, result: {} });
+    }
+    return jsonResponse({ success: true, result: {} });
   };
 
   const client = new TuyaClient({
@@ -27,18 +30,21 @@ test('openGate requests a token then sends accessory_lock true', async () => {
 
   await client.openGate();
 
-  assert.equal(calls.length, 2);
-  assert.match(calls[0].url, /openapi\.tuyaeu\.com\/v1\.0\/token/);
-  assert.match(calls[1].url, /\/v1\.0\/devices\/dev123\/commands/);
-  assert.equal(calls[1].method, 'POST');
-  assert.deepEqual(JSON.parse(calls[1].body), {
-    commands: [{ code: 'accessory_lock', value: true }],
+  assert.ok(calls.some((call) => String(call.url).includes('/v1.0/token')));
+  assert.ok(calls.some((call) => String(call.url).includes('/stream/actions/allocate')));
+  const issue = calls.find((call) => String(call.url).includes('/shadow/properties/issue'));
+  assert.ok(issue);
+  assert.equal(issue.method, 'POST');
+  assert.deepEqual(JSON.parse(issue.body), {
+    properties: JSON.stringify({ accessory_lock: true }),
   });
-  assert.equal(calls[1].headers.access_token, 'tok');
-  assert.ok(calls[1].headers.sign);
+  assert.equal(
+    calls.some((call) => String(call.url).includes('/v1.0/devices/') && String(call.url).includes('/commands')),
+    false,
+  );
 });
 
-test('failed command raises TuyaApiError', async () => {
+test('failed property issue raises TuyaApiError', async () => {
   const fetchImpl = async (url) => {
     if (String(url).includes('/token')) {
       return jsonResponse({
@@ -46,20 +52,24 @@ test('failed command raises TuyaApiError', async () => {
         result: { access_token: 'tok', expire_time: 7200 },
       });
     }
-    return jsonResponse({ success: false, code: 2001, msg: 'device offline' });
+    if (String(url).includes('/stream/')) {
+      return jsonResponse({ success: false, msg: 'no stream' });
+    }
+    return jsonResponse({ success: false, code: 2008, msg: 'command or value not support' });
   };
 
   const client = new TuyaClient({
     accessId: 'id',
     accessSecret: 'secret',
     deviceId: 'dev123',
+    warmupStream: false,
     fetchImpl,
     now: () => 1,
   });
 
   await assert.rejects(() => client.openGate(), (error) => {
     assert.ok(error instanceof TuyaApiError);
-    assert.match(error.message, /device offline/);
+    assert.match(error.message, /command or value not support/);
     return true;
   });
 });

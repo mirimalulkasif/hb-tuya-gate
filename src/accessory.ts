@@ -102,7 +102,10 @@ export class GateAccessory {
         this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE,
       );
     } finally {
-      this.busy = false;
+      // Keep busy briefly so HomeKit retries do not spam Tuya.
+      setTimeout(() => {
+        this.busy = false;
+      }, 1500);
     }
   }
 }

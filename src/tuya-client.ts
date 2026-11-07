@@ -8,6 +8,8 @@ export interface TuyaClientOptions {
   deviceId: string;
   region?: string;
   lockCode?: string;
+  /** Try opening a live stream before lock (needed on some intercoms). */
+  warmupStream?: boolean;
   /** Injected for tests. */
   fetchImpl?: typeof fetch;
   now?: () => number;
@@ -29,11 +31,13 @@ interface TokenCache {
 }
 
 /**
- * Minimal Tuya OpenAPI client: login + send a boolean lock/open command.
+ * Minimal Tuya OpenAPI client for Gate Camera lock open.
+ * Video intercoms often reject /v1.0/.../commands (error 2008); use v2 shadow properties instead.
  */
 export class TuyaClient {
   private readonly host: string;
   private readonly lockCode: string;
+  private readonly warmupStream: boolean;
   private readonly fetchImpl: typeof fetch;
   private readonly now: () => number;
   private token?: TokenCache;
@@ -42,21 +46,48 @@ export class TuyaClient {
     const region = (options.region || DEFAULT_REGION).toLowerCase();
     this.host = REGION_HOSTS[region] || REGION_HOSTS[DEFAULT_REGION];
     this.lockCode = options.lockCode || 'accessory_lock';
+    this.warmupStream = options.warmupStream !== false;
     this.fetchImpl = options.fetchImpl || fetch;
     this.now = options.now || Date.now;
   }
 
   /** Pulses the gate/door open command (Lock Switch / accessory_lock = true). */
   async openGate(): Promise<void> {
-    await this.sendCommand(this.lockCode, true);
+    if (this.warmupStream) {
+      await this.tryWarmupStream();
+    }
+    await this.issueProperty(this.lockCode, true);
   }
 
+  /** Preferred path for IPC / Gate Camera lock DPs. */
+  async issueProperty(code: string, value: boolean | string | number): Promise<void> {
+    const path = `/v2.0/cloud/thing/${this.options.deviceId}/shadow/properties/issue`;
+    const body = JSON.stringify({
+      properties: JSON.stringify({ [code]: value }),
+    });
+    const response = await this.request('POST', path, body);
+    if (!response.success) {
+      throw new TuyaApiError(response.msg || 'Tuya property issue failed', response.code);
+    }
+  }
+
+  /** Legacy commands API — kept for debugging / non-camera devices. */
   async sendCommand(code: string, value: boolean | string | number): Promise<void> {
     const path = `/v1.0/devices/${this.options.deviceId}/commands`;
     const body = JSON.stringify({ commands: [{ code, value }] });
     const response = await this.request('POST', path, body);
     if (!response.success) {
       throw new TuyaApiError(response.msg || 'Tuya command failed', response.code);
+    }
+  }
+
+  private async tryWarmupStream(): Promise<void> {
+    const path = `/v1.0/devices/${this.options.deviceId}/stream/actions/allocate`;
+    const body = JSON.stringify({ type: 'rtsp' });
+    try {
+      await this.request('POST', path, body);
+    } catch {
+      // Stream APIs vary by product; lock may still work without warmup.
     }
   }
 

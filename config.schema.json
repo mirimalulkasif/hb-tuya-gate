@@ -58,6 +58,12 @@
         "type": "boolean",
         "default": false,
         "description": "Off (default): only a Lock in Home — Unlock opens the gate. On: also add a momentary Switch that does the same open pulse (useful for some automations)."
+      },
+      "warmupStream": {
+        "title": "Warm up camera stream before open",
+        "type": "boolean",
+        "default": true,
+        "description": "Some Gate Cameras only accept accessory_lock after a short live-stream allocate. Leave on unless open works without it."
       }
     }
   }
