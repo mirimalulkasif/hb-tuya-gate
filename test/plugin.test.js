@@ -68,10 +68,10 @@ test('unlocking the lock sends openGate once', async () => {
 
   await setCharacteristic(on, true);
   await waitFor(() => opens.length === 1);
-  assert.equal(opens.length, 1);
 
   await setCharacteristic(target, hap.Characteristic.LockTargetState.UNSECURED);
   await waitFor(() => opens.length === 2);
+  await waitFor(() => target.value === hap.Characteristic.LockTargetState.SECURED);
   assert.equal(opens.length, 2);
   assert.equal(target.value, hap.Characteristic.LockTargetState.SECURED);
 });

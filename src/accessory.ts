@@ -49,20 +49,23 @@ export class GateAccessory {
     const { Characteristic } = this.platform;
     if (Number(value) !== Characteristic.LockTargetState.UNSECURED) {
       this.lockService.updateCharacteristic(
-        Characteristic.LockTargetState,
-        Characteristic.LockTargetState.SECURED,
+        Characteristic.LockCurrentState,
+        Characteristic.LockCurrentState.SECURED,
       );
       return;
     }
     await this.pulseOpen('lock');
-    this.lockService.updateCharacteristic(
-      Characteristic.LockTargetState,
-      Characteristic.LockTargetState.SECURED,
-    );
-    this.lockService.updateCharacteristic(
-      Characteristic.LockCurrentState,
-      Characteristic.LockCurrentState.SECURED,
-    );
+    // HomeKit applies the UNSECURED target after onSet returns; reset on the next tick.
+    setTimeout(() => {
+      this.lockService.updateCharacteristic(
+        Characteristic.LockTargetState,
+        Characteristic.LockTargetState.SECURED,
+      );
+      this.lockService.updateCharacteristic(
+        Characteristic.LockCurrentState,
+        Characteristic.LockCurrentState.SECURED,
+      );
+    }, 50);
   }
 
   private async setSwitch(value: CharacteristicValue): Promise<void> {
