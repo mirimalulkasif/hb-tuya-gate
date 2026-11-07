@@ -6,8 +6,8 @@ It sends the same command the Tuya app uses for **Lock Switch**: pulse `accessor
 
 ## What you get in Home
 
-- **Lock** — set to Unlock to open the gate (returns to Locked)
-- **Open Gate Switch** — momentary switch for the same open pulse (handy for automations)
+- **Lock** (always) — Unlock opens the gate, then returns to Locked
+- **Switch** (optional) — momentary control for the same open pulse; enable with `showSwitch`
 
 ## Requirements
 
@@ -41,11 +41,17 @@ Restart Homebridge, then add **Tuya Gate** from the Plugins page.
       "accessSecret": "YOUR_ACCESS_SECRET",
       "deviceId": "bf3f24408fb356db59qioh",
       "region": "eu",
-      "lockCode": "accessory_lock"
+      "lockCode": "accessory_lock",
+      "showSwitch": false
     }
   ]
 }
 ```
+
+| Option | Meaning |
+|--------|---------|
+| `showSwitch: false` (default) | Only the **Lock** appears in Home |
+| `showSwitch: true` | **Lock** and a momentary **Switch** (same open command) |
 
 `region` must match the project data center (`eu` for `openapi.tuyaeu.com`).
 
@@ -55,7 +61,7 @@ If you have a second lock channel, you can try `"lockCode": "ipc_c_lock"` (DP 23
 
 In the Home app:
 
-- When / scene: unlock **Open Gate**, or turn on **Open Gate Switch**
+- Unlock **Open Gate**, or (if enabled) turn on **Open Gate Switch**
 - Then: turn on a light, send a notification, run a Shortcut for Siri announce, etc.
 
 ## Development

@@ -21,11 +21,49 @@ test('the plugin registers the Tuya Gate platform', () => {
   });
 });
 
-test('unlocking the lock sends openGate once', async () => {
+test('lock only by default: unlock sends openGate and no switch service', async () => {
   const opens = [];
+  const { accessories, launch, platform } = createPlatform({
+    openGate: async () => {
+      opens.push(true);
+    },
+  });
+
+  launch();
+  await platform.ready;
+  assert.equal(accessories.length, 1);
+  assert.equal(accessories[0].getService(hap.Service.Switch), undefined);
+
+  const lock = accessories[0].getService(hap.Service.LockMechanism);
+  const target = lock.getCharacteristic(hap.Characteristic.LockTargetState);
+  await setCharacteristic(target, hap.Characteristic.LockTargetState.UNSECURED);
+  await waitFor(() => opens.length === 1);
+  await waitFor(() => target.value === hap.Characteristic.LockTargetState.SECURED);
+  assert.equal(opens.length, 1);
+});
+
+test('showSwitch true exposes a momentary switch that opens the gate', async () => {
+  const opens = [];
+  const { accessories, launch, platform } = createPlatform({
+    config: { showSwitch: true },
+    openGate: async () => {
+      opens.push(true);
+    },
+  });
+
+  launch();
+  await platform.ready;
+  const sw = accessories[0].getService('Open Gate Switch');
+  assert.ok(sw);
+  const on = sw.getCharacteristic(hap.Characteristic.On);
+  await setCharacteristic(on, true);
+  await waitFor(() => opens.length === 1);
+  assert.equal(opens.length, 1);
+});
+
+function createPlatform({ openGate, config = {} }) {
   const accessories = [];
   let launch = () => {};
-
   const api = {
     hap,
     platformAccessory: PlatformAccessory,
@@ -51,30 +89,11 @@ test('unlocking the lock sends openGate once', async () => {
     accessSecret: 'secret',
     deviceId: 'bf3f24408fb356db59qioh',
     region: 'eu',
-  }, api, () => ({
-    openGate: async () => {
-      opens.push(true);
-    },
-  }));
+    ...config,
+  }, api, () => ({ openGate }));
 
-  launch();
-  await platform.ready;
-  assert.equal(accessories.length, 1);
-
-  const lock = accessories[0].getService(hap.Service.LockMechanism);
-  const target = lock.getCharacteristic(hap.Characteristic.LockTargetState);
-  const sw = accessories[0].getService('Open Gate Switch');
-  const on = sw.getCharacteristic(hap.Characteristic.On);
-
-  await setCharacteristic(on, true);
-  await waitFor(() => opens.length === 1);
-
-  await setCharacteristic(target, hap.Characteristic.LockTargetState.UNSECURED);
-  await waitFor(() => opens.length === 2);
-  await waitFor(() => target.value === hap.Characteristic.LockTargetState.SECURED);
-  assert.equal(opens.length, 2);
-  assert.equal(target.value, hap.Characteristic.LockTargetState.SECURED);
-});
+  return { accessories, launch, platform };
+}
 
 function setCharacteristic(characteristic, value) {
   return new Promise((resolve, reject) => {
@@ -91,7 +110,7 @@ function waitFor(predicate, timeoutMs = 1000) {
         return;
       }
       if (Date.now() - start > timeoutMs) {
-        reject(new Error('timed out waiting for openGate'));
+        reject(new Error('timed out waiting for condition'));
         return;
       }
       setTimeout(tick, 10);

@@ -5,7 +5,7 @@ import { TuyaApiError, TuyaClient } from './tuya-client';
 
 export class GateAccessory {
   private readonly lockService: Service;
-  private readonly switchService: Service;
+  private readonly switchService?: Service;
   private busy = false;
 
   constructor(
@@ -13,6 +13,7 @@ export class GateAccessory {
     private readonly accessory: PlatformAccessory,
     private readonly client: TuyaClient,
     private readonly displayName: string,
+    private readonly showSwitch: boolean,
   ) {
     const { Characteristic, Service } = this.platform;
 
@@ -37,12 +38,19 @@ export class GateAccessory {
     this.lockService.getCharacteristic(Characteristic.LockCurrentState)
       .onGet(() => Characteristic.LockCurrentState.SECURED);
 
-    this.switchService = this.accessory.getService('Open Gate Switch')
-      || this.accessory.addService(Service.Switch, `${displayName} Switch`, 'open-gate-switch');
-    this.switchService.setCharacteristic(Characteristic.Name, `${displayName} Switch`);
-    this.switchService.getCharacteristic(Characteristic.On)
-      .onGet(() => false)
-      .onSet((value) => this.setSwitch(value));
+    const existingSwitch = this.accessory.getService('Open Gate Switch')
+      || this.accessory.getService(Service.Switch);
+
+    if (showSwitch) {
+      this.switchService = existingSwitch
+        || this.accessory.addService(Service.Switch, `${displayName} Switch`, 'open-gate-switch');
+      this.switchService.setCharacteristic(Characteristic.Name, `${displayName} Switch`);
+      this.switchService.getCharacteristic(Characteristic.On)
+        .onGet(() => false)
+        .onSet((value) => this.setSwitch(value));
+    } else if (existingSwitch) {
+      this.accessory.removeService(existingSwitch);
+    }
   }
 
   private async setLockTarget(value: CharacteristicValue): Promise<void> {
@@ -69,12 +77,12 @@ export class GateAccessory {
   }
 
   private async setSwitch(value: CharacteristicValue): Promise<void> {
-    if (!value) {
+    if (!value || !this.switchService) {
       return;
     }
     await this.pulseOpen('switch');
     setTimeout(() => {
-      this.switchService.updateCharacteristic(this.platform.Characteristic.On, false);
+      this.switchService?.updateCharacteristic(this.platform.Characteristic.On, false);
     }, 500);
   }
 

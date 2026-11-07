@@ -57,7 +57,8 @@ export class TuyaGatePlatform implements DynamicPlatformPlugin {
     accessory.context.deviceId = this.config.deviceId;
 
     const client = this.clientFactory(this.config);
-    new GateAccessory(this, accessory, client, name);
+    const showSwitch = this.config.showSwitch === true;
+    new GateAccessory(this, accessory, client, name, showSwitch);
 
     if (!existing) {
       this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
@@ -68,7 +69,7 @@ export class TuyaGatePlatform implements DynamicPlatformPlugin {
     }
 
     this.log.info(
-      `Ready to open ${name} on device ${this.config.deviceId} (${this.config.lockCode || DEFAULT_LOCK_CODE})`,
+      `Ready to open ${name} on device ${this.config.deviceId} (${this.config.lockCode || DEFAULT_LOCK_CODE}; ${showSwitch ? 'lock+switch' : 'lock only'})`,
     );
   }
 }
