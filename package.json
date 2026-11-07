@@ -1,0 +1,49 @@
+{
+  "name": "homebridge-tuya-gate",
+  "displayName": "Tuya Gate",
+  "version": "1.0.0",
+  "description": "Open a Tuya video intercom / gate lock from HomeKit (accessory_lock pulse).",
+  "license": "Apache-2.0",
+  "author": "mirimalulkasif",
+  "homepage": "https://github.com/mirimalulkasif/hb-tuya-gate#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mirimalulkasif/hb-tuya-gate.git"
+  },
+  "bugs": {
+    "url": "https://github.com/mirimalulkasif/hb-tuya-gate/issues"
+  },
+  "keywords": [
+    "homebridge-plugin",
+    "supports-hap",
+    "tuya",
+    "gate",
+    "intercom",
+    "door",
+    "lock"
+  ],
+  "engines": {
+    "node": ">=18.0.0",
+    "homebridge": "^1.6.0 || ^2.0.0"
+  },
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "config.schema.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "npm run build && node --test test/*.test.js",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "homebridge": "^1.11.0",
+    "typescript": "^5.9.0"
+  },
+  "peerDependencies": {
+    "homebridge": "^1.6.0 || ^2.0.0"
+  }
+}

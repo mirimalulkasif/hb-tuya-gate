@@ -1,0 +1,56 @@
+{
+  "pluginAlias": "TuyaGate",
+  "pluginType": "platform",
+  "singular": true,
+  "headerDisplay": "Opens a Tuya Gate Camera / video intercom lock from HomeKit by pulsing accessory_lock (DP 148).",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "title": "Name in Home",
+        "type": "string",
+        "default": "Open Gate",
+        "required": true
+      },
+      "accessId": {
+        "title": "Access ID / Client ID",
+        "type": "string",
+        "required": true,
+        "description": "From Tuya IoT project Overview (Access ID / Client ID)."
+      },
+      "accessSecret": {
+        "title": "Access Secret / Client Secret",
+        "type": "string",
+        "required": true,
+        "description": "From Tuya IoT project Overview. Keep this private.",
+        "x-schema-form": {
+          "type": "password"
+        }
+      },
+      "deviceId": {
+        "title": "Device ID",
+        "type": "string",
+        "required": true,
+        "description": "Gate Camera device id, e.g. bf3f24408fb356db59qioh"
+      },
+      "region": {
+        "title": "Data center",
+        "type": "string",
+        "default": "eu",
+        "oneOf": [
+          { "title": "Central Europe (EU)", "enum": ["eu"] },
+          { "title": "Western America (US)", "enum": ["us"] },
+          { "title": "China", "enum": ["cn"] },
+          { "title": "India", "enum": ["in"] }
+        ],
+        "description": "Must match the cloud project data center."
+      },
+      "lockCode": {
+        "title": "Lock DP code",
+        "type": "string",
+        "default": "accessory_lock",
+        "description": "Tuya property code for the gate open pulse. Default accessory_lock (DP 148)."
+      }
+    }
+  }
+}
