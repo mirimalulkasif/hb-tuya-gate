@@ -46,6 +46,8 @@ export interface RingWatcherOptions {
 export class RingWatcher extends EventEmitter {
   private client?: TuyaWebsocketClient;
   private started = false;
+  private authFailed = false;
+  private errorCount = 0;
   private readonly deviceId: string;
   private readonly ringCodes: Set<string>;
   private readonly log: (message: string) => void;
@@ -100,11 +102,28 @@ export class RingWatcher extends EventEmitter {
       this.debugLog('Ring push: reconnecting…');
     });
     this.client.error((_ws, error) => {
-      this.log(
-        `Ring push error: ${errorMessage(error)}. `
-          + 'Enable Message Service in the Tuya IoT project (Cloud → Message Service), '
-          + 'and keep only one consumer on this Access ID.',
-      );
+      const message = errorMessage(error);
+      this.errorCount += 1;
+      if (/401/.test(message)) {
+        this.authFailed = true;
+      }
+      // 401 usually means Message Service is off — don't flood the Homebridge log.
+      if (this.authFailed) {
+        if (this.errorCount === 1 || this.errorCount === 5) {
+          this.log(
+            `Ring push rejected (401). Turn ON Message Service in Tuya IoT `
+              + `(Cloud project → Message Service → Enable), then restart this plugin. `
+              + `Rings cannot be detected until that works.`,
+          );
+        }
+        return;
+      }
+      if (this.errorCount <= 3 || this.errorCount % 20 === 0) {
+        this.log(
+          `Ring push error: ${message}. `
+            + 'Enable Message Service in the Tuya IoT project, and keep only one consumer on this Access ID.',
+        );
+      }
     });
     this.client.message((_ws, message) => {
       try {

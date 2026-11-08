@@ -21,6 +21,7 @@ export const DEFAULT_RING_HOLD_SECONDS = 20;
 /** Extra property codes to watch for a ring (first match wins). */
 export const DEFAULT_RING_CODE_FALLBACKS = [
   'doorbell_active',
+  'doorbell_pic',
   'doorbell',
   'doorbell_ring',
   'alarm_message',
