@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-const { TuyaClient, TuyaApiError, discoverModeProperty } = require('../dist/tuya-client');
+const { TuyaClient, TuyaApiError, discoverModeProperty, isRingActiveValue } = require('../dist/tuya-client');
 
 test('openGate uses v2 shadow properties issue, not v1 commands', async () => {
   const calls = [];
@@ -127,6 +127,41 @@ test('failed property issue raises TuyaApiError', async () => {
     assert.match(error.message, /command or value not support/);
     return true;
   });
+});
+
+test('isRingActiveValue treats empty doorbell_active as idle', () => {
+  assert.equal(isRingActiveValue(''), false);
+  assert.equal(isRingActiveValue(null), false);
+  assert.equal(isRingActiveValue(0), false);
+  assert.equal(isRingActiveValue('0'), false);
+  assert.equal(isRingActiveValue('call'), true);
+  assert.equal(isRingActiveValue(true), true);
+  assert.equal(isRingActiveValue('bucket;object;key'), true);
+});
+
+test('getRingSample reads doorbell_active', async () => {
+  const fetchImpl = async (url) => {
+    if (String(url).includes('/token')) {
+      return jsonResponse({ success: true, result: { access_token: 'tok', expire_time: 7200 } });
+    }
+    if (String(url).includes('/shadow/properties')) {
+      return jsonResponse({
+        success: true,
+        result: { properties: [{ code: 'doorbell_active', value: 'ringing-now', dp_id: 136 }] },
+      });
+    }
+    return jsonResponse({ success: true, result: {} });
+  };
+  const client = new TuyaClient({
+    accessId: 'id',
+    accessSecret: 'secret',
+    deviceId: 'dev123',
+    fetchImpl,
+    now: () => 1,
+  });
+  const sample = await client.getRingSample();
+  assert.equal(sample.ringing, true);
+  assert.equal(sample.code, 'doorbell_active');
 });
 
 function jsonResponse(payload) {

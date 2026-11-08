@@ -2,8 +2,8 @@
   "pluginAlias": "TuyaGate",
   "pluginType": "platform",
   "singular": true,
-  "headerDisplay": "Opens a Tuya Gate Camera / video intercom from HomeKit (accessory_lock). Optionally expose At Home / Not at Home / Dormant switches for the indoor monitor ring mode (same as the Tuya app — not an alarm panel).",
-  "footerDisplay": "Tip: Leave “Show open switch” off for a cleaner Home screen. Mode switches mirror At Home / Not at Home / Dormant.",
+  "headerDisplay": "Opens a Tuya Gate Camera from HomeKit, and can notify you when someone rings (motion sensor). Optional At Home / Not at Home / Dormant switches.",
+  "footerDisplay": "Tip: In Home, create an automation: when “Open Gate Ring” detects motion → Notify. Leave showModes off unless you confirmed a cloud mode DP.",
   "schema": {
     "type": "object",
     "properties": {
@@ -105,6 +105,32 @@
         "type": "boolean",
         "default": true,
         "description": "Some Gate Cameras only accept accessory_lock after a short live-stream allocate."
+      },
+      "showRingSensor": {
+        "title": "Show ring sensor (for notifications)",
+        "type": "boolean",
+        "default": true,
+        "description": "Motion sensor that trips when someone rings. Use a Home automation to get a notification."
+      },
+      "ringCode": {
+        "title": "Ring DP code",
+        "type": "string",
+        "default": "doorbell_active",
+        "description": "Tuya property that becomes non-empty when the outdoor station rings. Default doorbell_active."
+      },
+      "ringPollSeconds": {
+        "title": "Ring poll interval (seconds)",
+        "type": "integer",
+        "default": 2,
+        "minimum": 1,
+        "description": "How often to check Tuya for a ring. Lower = faster notify, more API calls."
+      },
+      "ringHoldSeconds": {
+        "title": "Ring hold (seconds)",
+        "type": "integer",
+        "default": 20,
+        "minimum": 3,
+        "description": "How long the motion sensor stays active after a ring (gives Home time to notify)."
       }
     }
   }

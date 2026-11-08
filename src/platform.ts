@@ -16,6 +16,9 @@ import {
   DEFAULT_MODE_HOME,
   DEFAULT_MODE_OUT,
   DEFAULT_REGION,
+  DEFAULT_RING_CODE,
+  DEFAULT_RING_HOLD_SECONDS,
+  DEFAULT_RING_POLL_SECONDS,
   PLATFORM_NAME,
   PLUGIN_NAME,
 } from './settings';
@@ -25,7 +28,8 @@ export class TuyaGatePlatform implements DynamicPlatformPlugin {
   public readonly Service: typeof Service;
   public readonly Characteristic: typeof Characteristic;
   private readonly cachedAccessories: PlatformAccessory[] = [];
-  private accessoryHandler?: GateAccessory;
+  /** Exposed for tests. */
+  accessoryHandler?: GateAccessory;
   public ready: Promise<void> = Promise.resolve();
 
   constructor(
@@ -44,6 +48,7 @@ export class TuyaGatePlatform implements DynamicPlatformPlugin {
         modeHomeValue: String(cfg.modeHomeValue || DEFAULT_MODE_HOME),
         modeOutValue: String(cfg.modeOutValue || DEFAULT_MODE_OUT),
         modeDormantValue: String(cfg.modeDormantValue || DEFAULT_MODE_DORMANT),
+        ringCode: cfg.ringCode ? String(cfg.ringCode) : DEFAULT_RING_CODE,
         warmupStream: cfg.warmupStream !== false,
       }),
   ) {
@@ -80,12 +85,19 @@ export class TuyaGatePlatform implements DynamicPlatformPlugin {
     // Off by default: many Gate Cameras do not expose ring mode over Tuya cloud.
     const showModes = this.config.showModes === true;
     const modePollSeconds = Number(this.config.modePollSeconds) || 120;
+    // On by default — Home can notify when this motion sensor trips.
+    const showRingSensor = this.config.showRingSensor !== false;
+    const ringPollSeconds = Number(this.config.ringPollSeconds) || DEFAULT_RING_POLL_SECONDS;
+    const ringHoldSeconds = Number(this.config.ringHoldSeconds) || DEFAULT_RING_HOLD_SECONDS;
 
     this.accessoryHandler = new GateAccessory(this, accessory, client, {
       displayName: name,
       showSwitch,
       showModes,
       modePollSeconds,
+      showRingSensor,
+      ringPollSeconds,
+      ringHoldSeconds,
     });
 
     if (!existing) {
@@ -99,6 +111,7 @@ export class TuyaGatePlatform implements DynamicPlatformPlugin {
     this.log.info(
       `Ready: ${name} device=${this.config.deviceId} lock=${this.config.lockCode || DEFAULT_LOCK_CODE}`
         + ` modes=${showModes ? `on (${this.config.modeCode || `${DEFAULT_MODE_CODE}/auto`})` : 'off'}`
+        + ` ring=${showRingSensor ? `on (${this.config.ringCode || DEFAULT_RING_CODE})` : 'off'}`
         + ` openSwitch=${showSwitch ? 'on' : 'off'}`,
     );
   }

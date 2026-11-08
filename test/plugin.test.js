@@ -83,6 +83,30 @@ test('mode switches are off unless showModes is enabled', async () => {
   }
 });
 
+test('ring motion sensor trips when Tuya reports a visitor call', async () => {
+  let ringing = false;
+  const { accessories, launch, platform, shutdown } = createPlatform({
+    config: { showRingSensor: true, ringPollSeconds: 1, ringHoldSeconds: 3 },
+    getRingSample: async () => (ringing
+      ? { ringing: true, code: 'doorbell_active', value: 'call' }
+      : { ringing: false }),
+  });
+
+  try {
+    launch();
+    await platform.ready;
+    const motion = accessories[0].getServiceById(hap.Service.MotionSensor, 'gate-ring');
+    assert.ok(motion);
+    assert.equal(motion.getCharacteristic(hap.Characteristic.MotionDetected).value, false);
+
+    ringing = true;
+    platform.accessoryHandler.triggerRingForTests();
+    assert.equal(motion.getCharacteristic(hap.Characteristic.MotionDetected).value, true);
+  } finally {
+    shutdown();
+  }
+});
+
 test('mode switches set intercom home/out/dormant (not an alarm)', async () => {
   const modes = [];
   const { accessories, launch, platform, shutdown } = createPlatform({
@@ -120,7 +144,7 @@ test('mode switches set intercom home/out/dormant (not an alarm)', async () => {
   }
 });
 
-function createPlatform({ openGate, getMode, setMode, config = {} }) {
+function createPlatform({ openGate, getMode, setMode, getRingSample, config = {} }) {
   const accessories = [];
   let launch = () => {};
   let shutdown = () => {};
@@ -161,6 +185,8 @@ function createPlatform({ openGate, getMode, setMode, config = {} }) {
     getModeDeviceId: () => 'bf3f24408fb356db59qioh',
     ensureModeCode: async () => 'mode',
     describeModeCandidates: async () => ['mode="at_home" (dp 1)'],
+    getRingCodes: () => ['doorbell_active'],
+    getRingSample: getRingSample || (async () => ({ ringing: false })),
   }));
 
   return { accessories, launch, platform, shutdown };

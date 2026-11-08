@@ -7,6 +7,8 @@ import {
   DEFAULT_MODE_HOME,
   DEFAULT_MODE_OUT,
   DEFAULT_REGION,
+  DEFAULT_RING_CODE,
+  DEFAULT_RING_CODE_FALLBACKS,
   REGION_HOSTS,
 } from './settings';
 
@@ -24,11 +26,21 @@ export interface TuyaClientOptions {
   modeHomeValue?: string;
   modeOutValue?: string;
   modeDormantValue?: string;
+  /** Primary DP for visitor ring (default doorbell_active). */
+  ringCode?: string;
+  /** Extra ring DP codes to poll. */
+  ringCodes?: string[];
   /** Try opening a live stream before lock (needed on some intercoms). */
   warmupStream?: boolean;
   /** Injected for tests. */
   fetchImpl?: typeof fetch;
   now?: () => number;
+}
+
+export interface RingSample {
+  ringing: boolean;
+  code?: string;
+  value?: unknown;
 }
 
 export interface TuyaProperty {
@@ -99,6 +111,7 @@ export class TuyaClient {
   private readonly configuredModeValues: Record<GateMode, string>;
   private learnedModeValues: Partial<Record<GateMode, string | number>> = {};
   private readonly warmupStream: boolean;
+  private readonly ringCodes: string[];
   private readonly fetchImpl: typeof fetch;
   private readonly now: () => number;
   private token?: TokenCache;
@@ -114,8 +127,35 @@ export class TuyaClient {
       dormant: options.modeDormantValue || DEFAULT_MODE_DORMANT,
     };
     this.warmupStream = options.warmupStream !== false;
+    this.ringCodes = uniqueCodes([
+      options.ringCode || DEFAULT_RING_CODE,
+      ...(options.ringCodes || []),
+      ...DEFAULT_RING_CODE_FALLBACKS,
+    ]);
     this.fetchImpl = options.fetchImpl || fetch;
     this.now = options.now || Date.now;
+  }
+
+  getRingCodes(): string[] {
+    return [...this.ringCodes];
+  }
+
+  /**
+   * Detect a visitor ringing the outdoor station.
+   * Tuya `doorbell_active` is usually "" when idle and a non-empty payload when ringing.
+   */
+  async getRingSample(): Promise<RingSample> {
+    const properties = await this.getProperties(this.options.deviceId, this.ringCodes);
+    for (const code of this.ringCodes) {
+      const hit = properties.find((item) => item.code === code);
+      if (!hit) {
+        continue;
+      }
+      if (isRingActiveValue(hit.value)) {
+        return { ringing: true, code, value: hit.value };
+      }
+    }
+    return { ringing: false };
   }
 
   getModeCode(): string {
@@ -441,4 +481,47 @@ function valuesEqual(a: unknown, b: unknown): boolean {
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function uniqueCodes(codes: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const code of codes) {
+    const trimmed = code.trim();
+    if (!trimmed) {
+      continue;
+    }
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(trimmed);
+  }
+  return result;
+}
+
+/** True when a Tuya ring DP indicates an active visitor call. */
+export function isRingActiveValue(value: unknown): boolean {
+  if (value == null) {
+    return false;
+  }
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    return value !== 0;
+  }
+  const raw = String(value).trim();
+  if (!raw) {
+    return false;
+  }
+  const lower = raw.toLowerCase();
+  if (lower === '0' || lower === 'false' || lower === 'off' || lower === 'idle' || lower === 'none') {
+    return false;
+  }
+  if (lower === '{}' || lower === '[]' || lower === 'null') {
+    return false;
+  }
+  return true;
 }

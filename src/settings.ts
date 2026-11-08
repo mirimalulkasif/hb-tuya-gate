@@ -13,6 +13,20 @@ export const DEFAULT_MODE_HOME = '0';
 export const DEFAULT_MODE_OUT = '1';
 export const DEFAULT_MODE_DORMANT = '2';
 
+/** Cloud property that becomes non-empty when someone rings the gate intercom. */
+export const DEFAULT_RING_CODE = 'doorbell_active';
+export const DEFAULT_RING_POLL_SECONDS = 2;
+export const DEFAULT_RING_HOLD_SECONDS = 20;
+
+/** Extra property codes to watch for a ring (first match wins). */
+export const DEFAULT_RING_CODE_FALLBACKS = [
+  'doorbell_active',
+  'doorbell',
+  'doorbell_ring',
+  'alarm_message',
+  'call_state',
+];
+
 export const REGION_HOSTS: Record<string, string> = {
   eu: 'https://openapi.tuyaeu.com',
   us: 'https://openapi.tuyaus.com',
