@@ -10,7 +10,7 @@ export interface GateAccessoryOptions {
   showModes: boolean;
   modePollSeconds: number;
   showRingSensor: boolean;
-  /** Momentary switch that trips the ring motion sensor (Home notify test). */
+  /** Momentary switch: try writing ipc_doorbell to Tuya, then trip Home motion. */
   showTestRingSwitch: boolean;
   ringPollSeconds: number;
   ringHoldSeconds: number;
@@ -107,7 +107,7 @@ export class GateAccessory {
         `[${displayName}] ring sensor on — codes ${this.client.getRingCodes().join(', ')}; `
           + `poll every ${options.ringPollSeconds}s`
           + (options.ringPush ? '; Message Service push enabled' : '')
-          + (showTestRingSwitch ? '; Test Ring switch on' : ''),
+          + (showTestRingSwitch ? '; Simulate Ring switch on' : ''),
       );
       this.platform.log.info(
         `[${displayName}] Home phone alerts need an automation: `
@@ -227,15 +227,17 @@ export class GateAccessory {
 
   private setupTestRingSwitch(enabled: boolean, displayName: string): Service | undefined {
     const { Characteristic, Service } = this.platform;
-    const existing = this.accessory.getServiceById(Service.Switch, 'test-ring-switch');
+    const existing = this.accessory.getServiceById(Service.Switch, 'test-ring-switch')
+      || this.accessory.getServiceById(Service.Switch, 'simulate-ring-switch');
     if (!enabled) {
       if (existing) {
         this.accessory.removeService(existing);
       }
       return undefined;
     }
-    const label = `${displayName} Test Ring`;
-    const service = existing || this.accessory.addService(Service.Switch, label, 'test-ring-switch');
+    // Label: Simulate Ring — writes the same ipc_doorbell Alarm Report Tuya shows on a real ring.
+    const label = `${displayName} Simulate Ring`;
+    const service = existing || this.accessory.addService(Service.Switch, label, 'simulate-ring-switch');
     service.setCharacteristic(Characteristic.Name, label);
     if ('ConfiguredName' in Characteristic) {
       try {
@@ -252,7 +254,20 @@ export class GateAccessory {
         if (!value) {
           return;
         }
-        this.markRinging('test-switch');
+        try {
+          const written = await this.client.simulateVisitorRing();
+          this.platform.log.info(
+            `[${this.options.displayName}] Simulate Ring wrote ${written.code} to Tuya`,
+          );
+          this.markRinging(`${written.code}/simulate`);
+        } catch (error) {
+          this.platform.log.warn(
+            `[${this.options.displayName}] Simulate Ring: Tuya rejected the write `
+              + `(${errorMessage(error)}). Tripping Home motion locally only — `
+              + `outdoor/indoor chime cannot be faked from cloud on this device.`,
+          );
+          this.markRinging('local-fallback');
+        }
         setTimeout(() => {
           service.updateCharacteristic(Characteristic.On, false);
         }, 500);

@@ -237,6 +237,35 @@ test('getRingSample edges on newer alarm_message ipc_doorbell', async () => {
   assert.equal(sample.code, 'alarm_message');
 });
 
+test('simulateVisitorRing issues alarm_message ipc_doorbell', async () => {
+  const calls = [];
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method, body: init.body });
+    if (String(url).includes('/token')) {
+      return jsonResponse({ success: true, result: { access_token: 'tok', expire_time: 7200 } });
+    }
+    if (String(url).includes('/properties/issue')) {
+      return jsonResponse({ success: true, result: {} });
+    }
+    return jsonResponse({ success: true, result: { properties: [] } });
+  };
+  const client = new TuyaClient({
+    accessId: 'id',
+    accessSecret: 'secret',
+    deviceId: 'dev123',
+    fetchImpl,
+    now: () => 1_700_000_000_000,
+  });
+  const written = await client.simulateVisitorRing();
+  assert.equal(written.code, 'alarm_message');
+  assert.equal(isIpcDoorbellAlarmMessage(written.value), true);
+  const issue = calls.find((call) => call.url.includes('/properties/issue'));
+  assert.ok(issue);
+  const body = JSON.parse(issue.body);
+  const props = JSON.parse(body.properties);
+  assert.equal(isIpcDoorbellAlarmMessage(props.alarm_message), true);
+});
+
 test('describeRingWatch summarizes ipc_doorbell alarm_message', async () => {
   const alarm = Buffer.from(JSON.stringify({ cmd: 'ipc_doorbell' })).toString('base64');
   const fetchImpl = async (url) => {

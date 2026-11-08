@@ -3,7 +3,7 @@
   "pluginType": "platform",
   "singular": true,
   "headerDisplay": "Opens a Tuya Gate Camera from HomeKit, and can notify you when someone rings (motion sensor). Optional At Home / Not at Home / Dormant switches.",
-  "footerDisplay": "Important: the phone will NOT alert by itself. In Home → Automation: when “Open Gate Ring” detects motion → Notify. Use “Test Ring” switch to verify that path. Leave showModes off unless you confirmed a cloud mode DP.",
+  "footerDisplay": "Important: the phone will NOT alert by itself. In Home → Automation: when “Open Gate Ring” detects motion → Notify. Use “Simulate Ring” to inject ipc_doorbell into Tuya (or trip Home locally if cloud rejects). Leave showModes off unless you confirmed a cloud mode DP.",
   "schema": {
     "type": "object",
     "properties": {
@@ -113,10 +113,10 @@
         "description": "Motion sensor that trips when someone rings. Use a Home automation to get a notification."
       },
       "showTestRingSwitch": {
-        "title": "Show Test Ring switch",
+        "title": "Show Simulate Ring switch",
         "type": "boolean",
         "default": true,
-        "description": "Momentary switch that trips the ring motion sensor so you can test Home notifications indoors (does not talk to Tuya)."
+        "description": "Momentary switch that writes the same ipc_doorbell Alarm Report to Tuya (and trips the ring motion sensor). If Tuya rejects the write, Home still trips locally."
       },
       "ringCode": {
         "title": "Ring DP code",

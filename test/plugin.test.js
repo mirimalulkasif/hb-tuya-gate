@@ -107,18 +107,25 @@ test('ring motion sensor trips when Tuya reports a visitor call', async () => {
   }
 });
 
-test('Test Ring switch trips the ring motion sensor', async () => {
+test('Simulate Ring switch writes to Tuya and trips motion', async () => {
+  const sims = [];
   const { accessories, launch, platform, shutdown } = createPlatform({
     config: { showRingSensor: true, showTestRingSwitch: true, ringPush: false },
+    simulateVisitorRing: async () => {
+      sims.push(true);
+      return { code: 'alarm_message', value: 'x' };
+    },
   });
   try {
     launch();
     await platform.ready;
     const motion = accessories[0].getServiceById(hap.Service.MotionSensor, 'gate-ring');
-    const testSwitch = accessories[0].getServiceById(hap.Service.Switch, 'test-ring-switch');
+    const simSwitch = accessories[0].getServiceById(hap.Service.Switch, 'simulate-ring-switch')
+      || accessories[0].getServiceById(hap.Service.Switch, 'test-ring-switch');
     assert.ok(motion);
-    assert.ok(testSwitch);
-    await setCharacteristic(testSwitch.getCharacteristic(hap.Characteristic.On), true);
+    assert.ok(simSwitch);
+    await setCharacteristic(simSwitch.getCharacteristic(hap.Characteristic.On), true);
+    await waitFor(() => sims.length === 1);
     assert.equal(motion.getCharacteristic(hap.Characteristic.MotionDetected).value, true);
   } finally {
     shutdown();
@@ -162,7 +169,7 @@ test('mode switches set intercom home/out/dormant (not an alarm)', async () => {
   }
 });
 
-function createPlatform({ openGate, getMode, setMode, getRingSample, config = {} }) {
+function createPlatform({ openGate, getMode, setMode, getRingSample, simulateVisitorRing, config = {} }) {
   const accessories = [];
   let launch = () => {};
   let shutdown = () => {};
@@ -207,6 +214,7 @@ function createPlatform({ openGate, getMode, setMode, getRingSample, config = {}
     getRingCodes: () => ['doorbell_active'],
     getRingSample: getRingSample || (async () => ({ ringing: false })),
     describeRingWatch: async () => 'doorbell_active="" | alarm_message time=? ipc_doorbell=no',
+    simulateVisitorRing: simulateVisitorRing || (async () => ({ code: 'alarm_message', value: 'x' })),
   }));
 
   return { accessories, launch, platform, shutdown };
