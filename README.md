@@ -68,7 +68,11 @@ Restart the plugin / child bridge, then configure **Tuya Gate**.
 | `showSwitch` | Extra momentary open switch |
 | `warmupStream` | Allocate RTSP before open (helps some cameras) |
 
-If mode switches fail, open Tuya **API Explorer → Query properties**, change mode once in the Tuya app, and set `modeCode` (and values) from the property that changed.
+### If modes don’t change on the device
+
+1. Restart the plugin and check logs for `mode-like properties: …` and `device confirmed mode …` (or an error).
+2. Modes are sometimes on the **indoor monitor** device, not the Gate Camera — set **Mode device ID** to that id.
+3. Or in Tuya **API Explorer → Query properties**, change At Home / Not at Home / Dormant in the app, note which `code`/`value` changed, and set **Mode DP code** + the three values.
 
 ## License
 

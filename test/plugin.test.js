@@ -144,6 +144,9 @@ function createPlatform({ openGate, getMode, setMode, config = {} }) {
     getMode: getMode || (async () => 'home'),
     setMode: setMode || (async () => undefined),
     getModeCode: () => 'mode',
+    getModeDeviceId: () => 'bf3f24408fb356db59qioh',
+    ensureModeCode: async () => 'mode',
+    describeModeCandidates: async () => ['mode="at_home" (dp 1)'],
   }));
 
   return { accessories, launch, platform, shutdown };

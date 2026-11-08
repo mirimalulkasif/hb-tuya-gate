@@ -65,10 +65,15 @@
         "default": true,
         "description": "On (default): three switches matching the Tuya intercom modes. Not a security alarm."
       },
+      "modeDeviceId": {
+        "title": "Mode device ID (optional)",
+        "type": "string",
+        "description": "If At Home / Not at Home / Dormant is on the indoor monitor (not the Gate Camera), put that device’s ID here. Leave blank to use the Gate Camera device ID."
+      },
       "modeCode": {
         "title": "Mode DP code (optional)",
         "type": "string",
-        "description": "Tuya property code for indoor mode. Leave blank to auto-detect from device properties."
+        "description": "Tuya property code for indoor mode. Leave blank to auto-detect. Check Homebridge logs for “mode-like properties” after restart."
       },
       "modeHomeValue": {
         "title": "At Home value",

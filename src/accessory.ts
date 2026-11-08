@@ -72,12 +72,35 @@ export class GateAccessory {
     this.setupModeSwitches(showModes);
 
     if (showModes) {
-      void this.refreshMode('startup');
+      void this.bootstrapModes();
       const pollMs = Math.max(30, options.modePollSeconds) * 1000;
       this.modeTimer = setInterval(() => {
         void this.refreshMode('poll');
       }, pollMs);
     }
+  }
+
+  private async bootstrapModes(): Promise<void> {
+    try {
+      const code = await this.client.ensureModeCode();
+      this.platform.log.info(
+        `[${this.options.displayName}] mode DP=${code} on device ${this.client.getModeDeviceId()}`,
+      );
+      const candidates = await this.client.describeModeCandidates();
+      if (candidates.length > 0) {
+        this.platform.log.info(
+          `[${this.options.displayName}] mode-like properties: ${candidates.join(' | ')}`,
+        );
+      } else {
+        this.platform.log.warn(
+          `[${this.options.displayName}] no mode-like properties found — `
+            + 'mode may be on the indoor monitor device id (set modeDeviceId), or set modeCode from Query properties',
+        );
+      }
+    } catch (error) {
+      this.platform.log.warn(`[${this.options.displayName}] mode discovery failed: ${errorMessage(error)}`);
+    }
+    await this.refreshMode('startup');
   }
 
   stop(): void {
@@ -137,14 +160,15 @@ export class GateAccessory {
       return;
     }
     this.modeBusy = true;
-    this.platform.log.info(`[${this.options.displayName}] setting intercom mode → ${mode}`);
+    this.platform.log.info(
+      `[${this.options.displayName}] setting intercom mode → ${mode} `
+        + `(DP ${this.client.getModeCode()} on ${this.client.getModeDeviceId()})`,
+    );
     try {
       await this.client.setMode(mode);
       this.currentMode = mode;
       this.applyModeToHomeKit(mode);
-      this.platform.log.info(
-        `[${this.options.displayName}] mode set to ${mode} (DP ${this.client.getModeCode()})`,
-      );
+      this.platform.log.info(`[${this.options.displayName}] device confirmed mode ${mode}`);
     } catch (error) {
       this.platform.log.error(`[${this.options.displayName}] ${errorMessage(error)}`);
       this.applyModeToHomeKit(this.currentMode);

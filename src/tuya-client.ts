@@ -16,6 +16,8 @@ export interface TuyaClientOptions {
   accessId: string;
   accessSecret: string;
   deviceId: string;
+  /** If modes live on the indoor monitor, set its device id here. */
+  modeDeviceId?: string;
   region?: string;
   lockCode?: string;
   modeCode?: string;
@@ -51,6 +53,24 @@ interface TokenCache {
   expireAt: number;
 }
 
+const MODE_VALUE_CANDIDATES: Record<GateMode, Array<string | number>> = {
+  home: ['at_home', 'home', 'At Home', 'at home', 'ATHOME', '0', 0],
+  out: ['not_at_home', 'out', 'Not at Home', 'not at home', 'leave_home', 'away', '1', 1],
+  dormant: ['dormant', 'Dormant', 'sleep', 'rest', 'hibernate', '2', 2],
+};
+
+const MODE_CODE_CANDIDATES = [
+  'mode',
+  'work_mode',
+  'indoor_mode',
+  'device_mode',
+  'ipc_mode',
+  'scene_mode',
+  'call_mode',
+  'doorbell_mode',
+  'master_mode',
+];
+
 /**
  * Minimal Tuya OpenAPI client for Gate Camera lock open + indoor ring mode.
  * Video intercoms often reject /v1.0/.../commands (error 2008); use v2 shadow properties instead.
@@ -59,7 +79,8 @@ export class TuyaClient {
   private readonly host: string;
   private readonly lockCode: string;
   private modeCode: string;
-  private readonly modeValues: Record<GateMode, string>;
+  private readonly configuredModeValues: Record<GateMode, string>;
+  private learnedModeValues: Partial<Record<GateMode, string | number>> = {};
   private readonly warmupStream: boolean;
   private readonly fetchImpl: typeof fetch;
   private readonly now: () => number;
@@ -70,7 +91,7 @@ export class TuyaClient {
     this.host = REGION_HOSTS[region] || REGION_HOSTS[DEFAULT_REGION];
     this.lockCode = options.lockCode || DEFAULT_LOCK_CODE;
     this.modeCode = options.modeCode || DEFAULT_MODE_CODE;
-    this.modeValues = {
+    this.configuredModeValues = {
       home: options.modeHomeValue || DEFAULT_MODE_HOME,
       out: options.modeOutValue || DEFAULT_MODE_OUT,
       dormant: options.modeDormantValue || DEFAULT_MODE_DORMANT,
@@ -84,16 +105,21 @@ export class TuyaClient {
     return this.modeCode;
   }
 
+  getModeDeviceId(): string {
+    return (this.options.modeDeviceId || this.options.deviceId).trim();
+  }
+
   /** Pulses the gate/door open command (Lock Switch / accessory_lock = true). */
   async openGate(): Promise<void> {
     if (this.warmupStream) {
       await this.tryWarmupStream();
     }
-    await this.issueProperty(this.lockCode, true);
+    await this.issueProperty(this.options.deviceId, this.lockCode, true);
   }
 
-  async getProperties(codes?: string[]): Promise<TuyaProperty[]> {
-    let path = `/v2.0/cloud/thing/${this.options.deviceId}/shadow/properties`;
+  async getProperties(deviceId?: string, codes?: string[]): Promise<TuyaProperty[]> {
+    const id = deviceId || this.options.deviceId;
+    let path = `/v2.0/cloud/thing/${id}/shadow/properties`;
     if (codes && codes.length > 0) {
       path += `?codes=${encodeURIComponent(codes.join(','))}`;
     }
@@ -105,9 +131,26 @@ export class TuyaClient {
     return Array.isArray(result?.properties) ? result!.properties! : [];
   }
 
+  /** Log-friendly list of properties that might be the ring mode. */
+  async describeModeCandidates(): Promise<string[]> {
+    const properties = await this.getProperties(this.getModeDeviceId());
+    return properties
+      .filter((property) => {
+        const code = property.code.toLowerCase();
+        const value = String(property.value ?? '').toLowerCase();
+        return (
+          MODE_CODE_CANDIDATES.some((candidate) => code.includes(candidate.replace('_', ''))) ||
+          /mode|home|dormant|away|leave|scene|sleep/i.test(property.code) ||
+          this.parseModeValue(property.value) != null ||
+          /home|dormant|away|sleep|out/.test(value)
+        );
+      })
+      .map((property) => `${property.code}=${JSON.stringify(property.value)} (dp ${property.dp_id ?? '?'})`);
+  }
+
   async getMode(): Promise<GateMode | undefined> {
     await this.ensureModeCode();
-    const properties = await this.getProperties([this.modeCode]);
+    const properties = await this.getProperties(this.getModeDeviceId(), [this.modeCode]);
     const hit = properties.find((item) => item.code === this.modeCode);
     if (!hit) {
       return undefined;
@@ -117,29 +160,51 @@ export class TuyaClient {
 
   async setMode(mode: GateMode): Promise<void> {
     await this.ensureModeCode();
-    await this.issueProperty(this.modeCode, this.modeValues[mode]);
+    const deviceId = this.getModeDeviceId();
+    const candidates = this.valueCandidatesFor(mode);
+    let lastError: unknown;
+
+    for (const value of candidates) {
+      try {
+        await this.issueProperty(deviceId, this.modeCode, value);
+        // Confirm the device accepted / stored the value.
+        await delay(400);
+        const properties = await this.getProperties(deviceId, [this.modeCode]);
+        const hit = properties.find((item) => item.code === this.modeCode);
+        const parsed = hit ? this.parseModeValue(hit.value) : undefined;
+        if (parsed === mode || valuesEqual(hit?.value, value)) {
+          this.learnedModeValues[mode] = value;
+          return;
+        }
+        lastError = new TuyaApiError(
+          `Mode DP ${this.modeCode} still ${JSON.stringify(hit?.value)} after setting ${JSON.stringify(value)}`,
+        );
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError instanceof Error
+      ? lastError
+      : new TuyaApiError(`Failed to set intercom mode ${mode} on ${this.modeCode}`);
   }
 
   /**
-   * If modeCode is still the default, try to find a property whose current
-   * value looks like home/out/dormant (or common aliases).
+   * Resolve which property holds At Home / Not at Home / Dormant.
    */
   async ensureModeCode(): Promise<string> {
     if (this.options.modeCode) {
       this.modeCode = this.options.modeCode;
       return this.modeCode;
     }
-    if (this.modeCode !== DEFAULT_MODE_CODE) {
-      return this.modeCode;
-    }
     try {
-      const properties = await this.getProperties();
-      const discovered = discoverModeProperty(properties, this.modeValues);
+      const properties = await this.getProperties(this.getModeDeviceId());
+      const discovered = discoverModeProperty(properties, this.configuredModeValues);
       if (discovered) {
         this.modeCode = discovered;
       }
     } catch {
-      // Keep configured/default code; setMode may still fail with a clear error.
+      // Keep configured/default code.
     }
     return this.modeCode;
   }
@@ -147,26 +212,50 @@ export class TuyaClient {
   parseModeValue(value: unknown): GateMode | undefined {
     const raw = String(value ?? '').trim().toLowerCase();
     for (const mode of ['home', 'out', 'dormant'] as GateMode[]) {
-      if (raw === this.modeValues[mode].toLowerCase()) {
+      const learned = this.learnedModeValues[mode];
+      if (learned != null && valuesEqual(learned, value)) {
+        return mode;
+      }
+      if (raw === String(this.configuredModeValues[mode]).toLowerCase()) {
         return mode;
       }
     }
-    // Common aliases across Tuya indoor monitors / app labels.
     if (['home', 'at_home', 'athome', 'at home', '0'].includes(raw)) {
       return 'home';
     }
     if (['out', 'away', 'leave_home', 'not_at_home', 'nothome', 'not at home', '1'].includes(raw)) {
       return 'out';
     }
-    if (['dormant', 'sleep', 'rest', 'dnd', '2'].includes(raw)) {
+    if (['dormant', 'sleep', 'rest', 'dnd', 'hibernate', '2'].includes(raw)) {
       return 'dormant';
     }
     return undefined;
   }
 
-  /** Preferred path for IPC / Gate Camera lock DPs. */
-  async issueProperty(code: string, value: boolean | string | number): Promise<void> {
-    const path = `/v2.0/cloud/thing/${this.options.deviceId}/shadow/properties/issue`;
+  private valueCandidatesFor(mode: GateMode): Array<string | number> {
+    const ordered: Array<string | number> = [];
+    const push = (value: string | number) => {
+      if (!ordered.some((item) => valuesEqual(item, value))) {
+        ordered.push(value);
+      }
+    };
+    if (this.learnedModeValues[mode] != null) {
+      push(this.learnedModeValues[mode]!);
+    }
+    // User-configured value first (unless still the generic default and we should try broader set).
+    push(this.configuredModeValues[mode]);
+    for (const value of MODE_VALUE_CANDIDATES[mode]) {
+      push(value);
+    }
+    return ordered;
+  }
+
+  async issueProperty(
+    deviceId: string,
+    code: string,
+    value: boolean | string | number,
+  ): Promise<void> {
+    const path = `/v2.0/cloud/thing/${deviceId}/shadow/properties/issue`;
     const body = JSON.stringify({
       properties: JSON.stringify({ [code]: value }),
     });
@@ -176,7 +265,6 @@ export class TuyaClient {
     }
   }
 
-  /** Legacy commands API — kept for debugging / non-camera devices. */
   async sendCommand(code: string, value: boolean | string | number): Promise<void> {
     const path = `/v1.0/devices/${this.options.deviceId}/commands`;
     const body = JSON.stringify({ commands: [{ code, value }] });
@@ -192,7 +280,7 @@ export class TuyaClient {
     try {
       await this.request('POST', path, body);
     } catch {
-      // Stream APIs vary by product; lock may still work without warmup.
+      // ignore
     }
   }
 
@@ -293,17 +381,37 @@ export function discoverModeProperty(
       'away',
       'sleep',
       'rest',
-    ].map((value) => value.toLowerCase()),
+      'hibernate',
+      '0',
+      '1',
+      '2',
+    ].map((value) => String(value).toLowerCase()),
   );
+
   for (const property of properties) {
     const value = String(property.value ?? '').trim().toLowerCase();
     if (aliases.has(value)) {
       return property.code;
     }
   }
-  // Prefer an explicit-looking code even if value is unknown yet.
+
+  for (const candidate of MODE_CODE_CANDIDATES) {
+    const hit = properties.find((property) => property.code.toLowerCase() === candidate);
+    if (hit) {
+      return hit.code;
+    }
+  }
+
   const preferred = properties.find((property) =>
-    /mode|dormant|leave_home|indoor/i.test(property.code),
+    /mode|dormant|leave_home|indoor|scene/i.test(property.code),
   );
   return preferred?.code;
+}
+
+function valuesEqual(a: unknown, b: unknown): boolean {
+  return String(a) === String(b);
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

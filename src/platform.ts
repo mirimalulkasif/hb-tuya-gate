@@ -39,6 +39,7 @@ export class TuyaGatePlatform implements DynamicPlatformPlugin {
         deviceId: String(cfg.deviceId || ''),
         region: String(cfg.region || DEFAULT_REGION),
         lockCode: String(cfg.lockCode || DEFAULT_LOCK_CODE),
+        modeDeviceId: cfg.modeDeviceId ? String(cfg.modeDeviceId) : undefined,
         modeCode: cfg.modeCode ? String(cfg.modeCode) : undefined,
         modeHomeValue: String(cfg.modeHomeValue || DEFAULT_MODE_HOME),
         modeOutValue: String(cfg.modeOutValue || DEFAULT_MODE_OUT),

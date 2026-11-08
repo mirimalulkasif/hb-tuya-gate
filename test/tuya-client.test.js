@@ -44,6 +44,44 @@ test('openGate uses v2 shadow properties issue, not v1 commands', async () => {
   );
 });
 
+test('setMode tries values and verifies readback', async () => {
+  const calls = [];
+  let stored = 'at_home';
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url: String(url), method: init.method, body: init.body });
+    if (String(url).includes('/token')) {
+      return jsonResponse({ success: true, result: { access_token: 'tok', expire_time: 7200 } });
+    }
+    if (String(url).includes('/shadow/properties/issue')) {
+      const body = JSON.parse(init.body);
+      const props = JSON.parse(body.properties);
+      stored = props.mode;
+      return jsonResponse({ success: true, result: {} });
+    }
+    if (String(url).includes('/shadow/properties')) {
+      return jsonResponse({
+        success: true,
+        result: { properties: [{ code: 'mode', value: stored, dp_id: 1 }] },
+      });
+    }
+    return jsonResponse({ success: true, result: {} });
+  };
+
+  const client = new TuyaClient({
+    accessId: 'id',
+    accessSecret: 'secret',
+    deviceId: 'cam',
+    modeCode: 'mode',
+    warmupStream: false,
+    fetchImpl,
+    now: () => 1,
+  });
+
+  await client.setMode('dormant');
+  assert.equal(stored, 'dormant');
+  assert.ok(calls.some((call) => call.url.includes('/properties/issue')));
+});
+
 test('failed property issue raises TuyaApiError', async () => {
   const fetchImpl = async (url) => {
     if (String(url).includes('/token')) {
