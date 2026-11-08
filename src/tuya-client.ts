@@ -54,21 +54,35 @@ interface TokenCache {
 }
 
 const MODE_VALUE_CANDIDATES: Record<GateMode, Array<string | number>> = {
-  home: ['at_home', 'home', 'At Home', 'at home', 'ATHOME', '0', 0],
-  out: ['not_at_home', 'out', 'Not at Home', 'not at home', 'leave_home', 'away', '1', 1],
-  dormant: ['dormant', 'Dormant', 'sleep', 'rest', 'hibernate', '2', 2],
+  home: ['0', 0, 'at_home', 'home', 'At Home', 'at home'],
+  out: ['1', 1, 'not_at_home', 'out', 'Not at Home', 'not at home', 'leave_home', 'away'],
+  dormant: ['2', 2, 'dormant', 'Dormant', 'sleep', 'rest', 'hibernate'],
 };
 
 const MODE_CODE_CANDIDATES = [
-  'mode',
+  'call_mode',
+  'doorbell_mode',
   'work_mode',
   'indoor_mode',
   'device_mode',
   'ipc_mode',
   'scene_mode',
-  'call_mode',
-  'doorbell_mode',
   'master_mode',
+  'mode',
+];
+
+/** Never treat these as the At Home / Not at Home / Dormant DP. */
+const MODE_CODE_BLOCKLIST = [
+  'motion_sensitivity',
+  'basic_nightvision',
+  'nightvision',
+  'sd_status',
+  'sd_format',
+  'sd_storge',
+  'sd_format_state',
+  'motion_switch',
+  'basic_flip',
+  'basic_osd',
 ];
 
 /**
@@ -365,6 +379,19 @@ export function discoverModeProperty(
   properties: TuyaProperty[],
   modeValues: Record<GateMode, string>,
 ): string | undefined {
+  const usable = properties.filter(
+    (property) => !MODE_CODE_BLOCKLIST.includes(property.code.toLowerCase()),
+  );
+
+  // Prefer known mode DP names (call_mode is common on Tuya gate cameras).
+  for (const candidate of MODE_CODE_CANDIDATES) {
+    const hit = usable.find((property) => property.code.toLowerCase() === candidate);
+    if (hit) {
+      return hit.code;
+    }
+  }
+
+  // Only match string labels — NOT bare 0/1/2 (those collide with motion_sensitivity etc.).
   const aliases = new Set(
     [
       modeValues.home,
@@ -382,28 +409,18 @@ export function discoverModeProperty(
       'sleep',
       'rest',
       'hibernate',
-      '0',
-      '1',
-      '2',
     ].map((value) => String(value).toLowerCase()),
   );
 
-  for (const property of properties) {
+  for (const property of usable) {
     const value = String(property.value ?? '').trim().toLowerCase();
     if (aliases.has(value)) {
       return property.code;
     }
   }
 
-  for (const candidate of MODE_CODE_CANDIDATES) {
-    const hit = properties.find((property) => property.code.toLowerCase() === candidate);
-    if (hit) {
-      return hit.code;
-    }
-  }
-
-  const preferred = properties.find((property) =>
-    /mode|dormant|leave_home|indoor|scene/i.test(property.code),
+  const preferred = usable.find((property) =>
+    /call_mode|doorbell_mode|work_mode|indoor_mode|leave_home|dormant/i.test(property.code),
   );
   return preferred?.code;
 }

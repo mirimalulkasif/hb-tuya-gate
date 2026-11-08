@@ -78,20 +78,20 @@
       "modeHomeValue": {
         "title": "At Home value",
         "type": "string",
-        "default": "at_home",
-        "description": "Exact Tuya enum/string for At Home (indoor rings)."
+        "default": "0",
+        "description": "Exact Tuya value for At Home. For call_mode this is usually 0."
       },
       "modeOutValue": {
         "title": "Not at Home value",
         "type": "string",
-        "default": "not_at_home",
-        "description": "Exact Tuya enum/string for Not at Home."
+        "default": "1",
+        "description": "Exact Tuya value for Not at Home. For call_mode this is usually 1."
       },
       "modeDormantValue": {
         "title": "Dormant value",
         "type": "string",
-        "default": "dormant",
-        "description": "Exact Tuya enum/string for Dormant (silent indoor)."
+        "default": "2",
+        "description": "Exact Tuya value for Dormant. For call_mode this is usually 2."
       },
       "modePollSeconds": {
         "title": "Mode refresh interval (seconds)",

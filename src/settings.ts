@@ -3,12 +3,16 @@ export const PLUGIN_NAME = 'homebridge-tuya-gate';
 
 export const DEFAULT_LOCK_CODE = 'accessory_lock';
 export const DEFAULT_REGION = 'eu';
-export const DEFAULT_MODE_CODE = 'mode';
+/** Common on Tuya Gate Camera / intercom (DP 151). */
+export const DEFAULT_MODE_CODE = 'call_mode';
 
-/** Tuya enum values for indoor monitor ring modes (match common app labels). */
-export const DEFAULT_MODE_HOME = 'at_home';
-export const DEFAULT_MODE_OUT = 'not_at_home';
-export const DEFAULT_MODE_DORMANT = 'dormant';
+/**
+ * Typical call_mode enums: 0 = At Home, 1 = Not at Home, 2 = Dormant.
+ * Override in config if Query properties shows different values.
+ */
+export const DEFAULT_MODE_HOME = '0';
+export const DEFAULT_MODE_OUT = '1';
+export const DEFAULT_MODE_DORMANT = '2';
 
 export const REGION_HOSTS: Record<string, string> = {
   eu: 'https://openapi.tuyaeu.com',

@@ -1,7 +1,7 @@
 {
   "name": "homebridge-tuya-gate",
   "displayName": "Tuya Gate",
-  "version": "1.3.3",
+  "version": "1.3.4",
   "description": "Open a Tuya video intercom / gate lock from HomeKit, plus At Home / Not at Home / Dormant modes.",
   "license": "Apache-2.0",
   "author": "mirimalulkasif",

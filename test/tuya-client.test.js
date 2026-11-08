@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-const { TuyaClient, TuyaApiError } = require('../dist/tuya-client');
+const { TuyaClient, TuyaApiError, discoverModeProperty } = require('../dist/tuya-client');
 
 test('openGate uses v2 shadow properties issue, not v1 commands', async () => {
   const calls = [];
@@ -44,9 +44,18 @@ test('openGate uses v2 shadow properties issue, not v1 commands', async () => {
   );
 });
 
+test('discoverModeProperty prefers call_mode over motion_sensitivity', () => {
+  const code = discoverModeProperty([
+    { code: 'motion_sensitivity', value: '2', dp_id: 106 },
+    { code: 'call_mode', value: '1', dp_id: 151 },
+    { code: 'basic_nightvision', value: '0', dp_id: 108 },
+  ], { home: '0', out: '1', dormant: '2' });
+  assert.equal(code, 'call_mode');
+});
+
 test('setMode tries values and verifies readback', async () => {
   const calls = [];
-  let stored = 'at_home';
+  let stored = '0';
   const fetchImpl = async (url, init = {}) => {
     calls.push({ url: String(url), method: init.method, body: init.body });
     if (String(url).includes('/token')) {
@@ -55,13 +64,13 @@ test('setMode tries values and verifies readback', async () => {
     if (String(url).includes('/shadow/properties/issue')) {
       const body = JSON.parse(init.body);
       const props = JSON.parse(body.properties);
-      stored = props.mode;
+      stored = props.call_mode;
       return jsonResponse({ success: true, result: {} });
     }
     if (String(url).includes('/shadow/properties')) {
       return jsonResponse({
         success: true,
-        result: { properties: [{ code: 'mode', value: stored, dp_id: 1 }] },
+        result: { properties: [{ code: 'call_mode', value: stored, dp_id: 151 }] },
       });
     }
     return jsonResponse({ success: true, result: {} });
@@ -71,14 +80,14 @@ test('setMode tries values and verifies readback', async () => {
     accessId: 'id',
     accessSecret: 'secret',
     deviceId: 'cam',
-    modeCode: 'mode',
+    modeCode: 'call_mode',
     warmupStream: false,
     fetchImpl,
     now: () => 1,
   });
 
   await client.setMode('dormant');
-  assert.equal(stored, 'dormant');
+  assert.equal(String(stored), '2');
   assert.ok(calls.some((call) => call.url.includes('/properties/issue')));
 });
 
