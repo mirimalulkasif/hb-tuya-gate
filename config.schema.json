@@ -131,6 +131,21 @@
         "default": 20,
         "minimum": 3,
         "description": "How long the motion sensor stays active after a ring (gives Home time to notify)."
+      },
+      "ringPush": {
+        "title": "Use Tuya Message Service (recommended)",
+        "type": "boolean",
+        "default": true,
+        "description": "Required for reliable ring detection. Enable Message Service in the Tuya IoT project, then keep this on."
+      },
+      "messageEnv": {
+        "title": "Message Service channel",
+        "type": "string",
+        "default": "prod",
+        "oneOf": [
+          { "title": "Production", "enum": ["prod"] },
+          { "title": "Test (device must be a Test Device in Tuya)", "enum": ["test"] }
+        ]
       }
     }
   }

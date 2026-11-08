@@ -151,6 +151,13 @@ export class TuyaClient {
       if (!hit) {
         continue;
       }
+      // doorbell_pic / alarm_message are often the lasting evidence of a ring.
+      if (code === 'doorbell_pic' || code === 'alarm_message' || code === 'movement_detect_pic') {
+        if (hit.value != null && String(hit.value).trim() !== '' && String(hit.value) !== 'null') {
+          return { ringing: true, code, value: hit.value };
+        }
+        continue;
+      }
       if (isRingActiveValue(hit.value)) {
         return { ringing: true, code, value: hit.value };
       }

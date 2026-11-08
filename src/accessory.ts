@@ -1,6 +1,7 @@
 import type { CharacteristicValue, PlatformAccessory, Service } from 'homebridge';
 
 import type { TuyaGatePlatform } from './platform';
+import { RingWatcher } from './ring-watcher';
 import { TuyaApiError, type GateMode, type TuyaClient } from './tuya-client';
 
 export interface GateAccessoryOptions {
@@ -11,6 +12,9 @@ export interface GateAccessoryOptions {
   showRingSensor: boolean;
   ringPollSeconds: number;
   ringHoldSeconds: number;
+  /** Enable Tuya Message Service push (needed for reliable rings). */
+  ringPush: boolean;
+  messageEnv: 'prod' | 'test';
 }
 
 /**
@@ -28,8 +32,10 @@ export class GateAccessory {
   private modeTimer?: ReturnType<typeof setInterval>;
   private ringTimer?: ReturnType<typeof setInterval>;
   private ringClearTimer?: ReturnType<typeof setTimeout>;
+  private ringWatcher?: RingWatcher;
   private ringing = false;
   private ringPollInFlight = false;
+  private lastPollSnapshot = '';
 
   constructor(
     private readonly platform: TuyaGatePlatform,
@@ -90,9 +96,13 @@ export class GateAccessory {
 
     if (showRingSensor && this.ringService) {
       this.platform.log.info(
-        `[${displayName}] ring sensor on — polling ${this.client.getRingCodes().join(', ')} `
-          + `every ${options.ringPollSeconds}s`,
+        `[${displayName}] ring sensor on — codes ${this.client.getRingCodes().join(', ')}; `
+          + `poll every ${options.ringPollSeconds}s`
+          + (options.ringPush ? '; Message Service push enabled' : ''),
       );
+      if (options.ringPush) {
+        this.startRingPush();
+      }
       void this.pollRing();
       const pollMs = Math.max(1, options.ringPollSeconds) * 1000;
       this.ringTimer = setInterval(() => {
@@ -137,6 +147,26 @@ export class GateAccessory {
       clearTimeout(this.ringClearTimer);
       this.ringClearTimer = undefined;
     }
+    this.ringWatcher?.stop();
+    this.ringWatcher = undefined;
+  }
+
+  private startRingPush(): void {
+    const cfg = this.platform.config;
+    this.ringWatcher = new RingWatcher({
+      accessId: String(cfg.accessId || ''),
+      accessSecret: String(cfg.accessSecret || ''),
+      deviceId: String(cfg.deviceId || ''),
+      region: String(cfg.region || 'eu'),
+      messageEnv: this.options.messageEnv,
+      ringCodes: this.client.getRingCodes(),
+      log: (message) => this.platform.log.info(`[${this.options.displayName}] ${message}`),
+      debugLog: (message) => this.platform.log.debug(`[${this.options.displayName}] ${message}`),
+    });
+    this.ringWatcher.on('ring', (event: { code: string }) => {
+      this.markRinging(`${event.code}/push`);
+    });
+    this.ringWatcher.start();
   }
 
   /** Test helper — inject a ring without Tuya. */
@@ -177,8 +207,15 @@ export class GateAccessory {
     this.ringPollInFlight = true;
     try {
       const sample = await this.client.getRingSample();
+      const snapshot = `${sample.code || ''}:${JSON.stringify(sample.value ?? '')}`;
+      if (snapshot !== this.lastPollSnapshot && sample.code) {
+        this.platform.log.debug(
+          `[${this.options.displayName}] ring poll ${sample.code}=${JSON.stringify(sample.value)}`,
+        );
+      }
+      this.lastPollSnapshot = snapshot;
       if (sample.ringing) {
-        this.markRinging(sample.code || 'ring');
+        this.markRinging(`${sample.code || 'ring'}/poll`);
       }
     } catch (error) {
       this.platform.log.debug(`[${this.options.displayName}] ring poll: ${errorMessage(error)}`);

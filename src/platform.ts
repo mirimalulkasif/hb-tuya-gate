@@ -89,6 +89,8 @@ export class TuyaGatePlatform implements DynamicPlatformPlugin {
     const showRingSensor = this.config.showRingSensor !== false;
     const ringPollSeconds = Number(this.config.ringPollSeconds) || DEFAULT_RING_POLL_SECONDS;
     const ringHoldSeconds = Number(this.config.ringHoldSeconds) || DEFAULT_RING_HOLD_SECONDS;
+    const ringPush = this.config.ringPush !== false;
+    const messageEnv = this.config.messageEnv === 'test' ? 'test' : 'prod';
 
     this.accessoryHandler = new GateAccessory(this, accessory, client, {
       displayName: name,
@@ -98,6 +100,8 @@ export class TuyaGatePlatform implements DynamicPlatformPlugin {
       showRingSensor,
       ringPollSeconds,
       ringHoldSeconds,
+      ringPush,
+      messageEnv,
     });
 
     if (!existing) {

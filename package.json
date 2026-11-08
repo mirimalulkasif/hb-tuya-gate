@@ -1,7 +1,7 @@
 {
   "name": "homebridge-tuya-gate",
   "displayName": "Tuya Gate",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Open a Tuya video intercom / gate lock from HomeKit, notify on visitor ring, plus optional At Home / Not at Home / Dormant modes.",
   "license": "Apache-2.0",
   "author": "mirimalulkasif",
@@ -37,6 +37,9 @@
     "build": "tsc",
     "test": "npm run build && node --test test/*.test.js",
     "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "tuya-pulsar": "^0.0.3"
   },
   "devDependencies": {
     "@types/node": "^22.19.0",

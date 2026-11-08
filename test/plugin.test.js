@@ -176,6 +176,7 @@ function createPlatform({ openGate, getMode, setMode, getRingSample, config = {}
     accessSecret: 'secret',
     deviceId: 'bf3f24408fb356db59qioh',
     region: 'eu',
+    ringPush: false,
     ...config,
   }, api, () => ({
     openGate: openGate || (async () => undefined),
