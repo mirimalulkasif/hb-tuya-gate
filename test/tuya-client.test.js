@@ -1,7 +1,13 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-const { TuyaClient, TuyaApiError, discoverModeProperty, isRingActiveValue } = require('../dist/tuya-client');
+const {
+  TuyaClient,
+  TuyaApiError,
+  discoverModeProperty,
+  isRingActiveValue,
+  isIpcDoorbellAlarmMessage,
+} = require('../dist/tuya-client');
 
 test('openGate uses v2 shadow properties issue, not v1 commands', async () => {
   const calls = [];
@@ -159,9 +165,74 @@ test('getRingSample reads doorbell_active', async () => {
     fetchImpl,
     now: () => 1,
   });
+  // First call baselines sticky DPs; second sees active doorbell_active.
+  assert.equal((await client.getRingSample()).ringing, false);
   const sample = await client.getRingSample();
   assert.equal(sample.ringing, true);
   assert.equal(sample.code, 'doorbell_active');
+});
+
+test('getProperties keeps commas literal in codes query', async () => {
+  let seenUrl = '';
+  const fetchImpl = async (url) => {
+    seenUrl = String(url);
+    if (seenUrl.includes('/token')) {
+      return jsonResponse({ success: true, result: { access_token: 'tok', expire_time: 7200 } });
+    }
+    return jsonResponse({ success: true, result: { properties: [] } });
+  };
+  const client = new TuyaClient({
+    accessId: 'id',
+    accessSecret: 'secret',
+    deviceId: 'dev123',
+    fetchImpl,
+    now: () => 1,
+  });
+  await client.getProperties('dev123', ['doorbell_active', 'alarm_message']);
+  assert.match(seenUrl, /codes=doorbell_active,alarm_message/);
+  assert.equal(seenUrl.includes('%2C'), false);
+});
+
+test('isIpcDoorbellAlarmMessage decodes base64 ipc_doorbell', () => {
+  const payload = Buffer.from(JSON.stringify({
+    v: '5.0',
+    cmd: 'ipc_doorbell',
+    type: 'image',
+  })).toString('base64');
+  assert.equal(isIpcDoorbellAlarmMessage(payload), true);
+  assert.equal(isIpcDoorbellAlarmMessage(Buffer.from('{"cmd":"motion"}').toString('base64')), false);
+});
+
+test('getRingSample edges on newer alarm_message ipc_doorbell', async () => {
+  const alarm = Buffer.from(JSON.stringify({ cmd: 'ipc_doorbell', type: 'image' })).toString('base64');
+  let time = 1000;
+  const fetchImpl = async (url) => {
+    if (String(url).includes('/token')) {
+      return jsonResponse({ success: true, result: { access_token: 'tok', expire_time: 7200 } });
+    }
+    return jsonResponse({
+      success: true,
+      result: {
+        properties: [
+          { code: 'doorbell_active', value: '', dp_id: 136, time: 1 },
+          { code: 'alarm_message', value: alarm, dp_id: 185, time },
+        ],
+      },
+    });
+  };
+  const client = new TuyaClient({
+    accessId: 'id',
+    accessSecret: 'secret',
+    deviceId: 'dev123',
+    fetchImpl,
+    now: () => 1,
+  });
+  assert.equal((await client.getRingSample()).ringing, false); // baseline
+  assert.equal((await client.getRingSample()).ringing, false); // unchanged sticky
+  time = 2000;
+  const sample = await client.getRingSample();
+  assert.equal(sample.ringing, true);
+  assert.equal(sample.code, 'alarm_message');
 });
 
 function jsonResponse(payload) {

@@ -207,10 +207,11 @@ export class GateAccessory {
     this.ringPollInFlight = true;
     try {
       const sample = await this.client.getRingSample();
-      const snapshot = `${sample.code || ''}:${JSON.stringify(sample.value ?? '')}`;
-      if (snapshot !== this.lastPollSnapshot && sample.code) {
-        this.platform.log.debug(
-          `[${this.options.displayName}] ring poll ${sample.code}=${JSON.stringify(sample.value)}`,
+      const snapshot = `${sample.code || ''}:${sample.time || ''}:${JSON.stringify(sample.value ?? '')}`;
+      if (snapshot !== this.lastPollSnapshot && sample.ringing) {
+        this.platform.log.info(
+          `[${this.options.displayName}] ring poll hit ${sample.code}`
+            + (sample.time ? ` time=${sample.time}` : ''),
         );
       }
       this.lastPollSnapshot = snapshot;
@@ -218,7 +219,7 @@ export class GateAccessory {
         this.markRinging(`${sample.code || 'ring'}/poll`);
       }
     } catch (error) {
-      this.platform.log.debug(`[${this.options.displayName}] ring poll: ${errorMessage(error)}`);
+      this.platform.log.warn(`[${this.options.displayName}] ring poll: ${errorMessage(error)}`);
     } finally {
       this.ringPollInFlight = false;
     }

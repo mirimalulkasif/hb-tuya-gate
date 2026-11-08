@@ -1,5 +1,7 @@
 import { EventEmitter } from 'node:events';
 
+import { isIpcDoorbellAlarmMessage } from './tuya-client';
+
 // Tuya's Pulsar WebSocket SDK (package name on npm: tuya-pulsar).
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const TuyaWebsocket = require('tuya-pulsar').default as TuyaWebsocketCtor;
@@ -159,6 +161,7 @@ export class RingWatcher extends EventEmitter {
 
     const data = unwrapData(envelope.payload?.data ?? envelope.payload);
     if (!data) {
+      this.debugLog(`Ring push: undecryptable/empty payload keys=${Object.keys(envelope || {}).join(',')}`);
       return;
     }
 
@@ -176,8 +179,13 @@ export class RingWatcher extends EventEmitter {
         .join(', ');
       this.log(`Device push: ${summary}`);
     } else {
-      // Help diagnose unexpected message shapes when someone rings.
-      this.log(`Device push (raw keys): ${Object.keys(data).join(', ')}`);
+      const bizCode = String(
+        envelope.payload?.bizCode || data.bizCode || data.eventType || '',
+      );
+      this.log(
+        `Device push (raw keys): ${Object.keys(data).join(', ')}`
+          + (bizCode ? ` bizCode=${bizCode}` : ''),
+      );
     }
 
     for (const status of statuses) {
@@ -193,9 +201,18 @@ export class RingWatcher extends EventEmitter {
       return;
     }
 
-    // Protocol 43 style doorbell notify (IPC) — treat as ring when for our device.
+    // Protocol 43 / IPC doorbell notify — treat as ring when for our device.
     const protocol = Number(envelope.payload?.protocol ?? data.protocol);
-    if (protocol === 43 || data.type === 'doorbell' || data.etype === 'doorbell') {
+    const bizCode = String(
+      envelope.payload?.bizCode || data.bizCode || data.eventType || data.etype || '',
+    ).toLowerCase();
+    if (
+      protocol === 43
+      || data.type === 'doorbell'
+      || data.etype === 'doorbell'
+      || bizCode.includes('doorbell')
+      || String(data.cmd || '').toLowerCase().includes('doorbell')
+    ) {
       this.log('Ring push: doorbell protocol notify');
       this.emit('ring', { code: 'protocol_43', value: data, source: 'pulsar' });
     }
@@ -260,6 +277,9 @@ function extractStatuses(data: Record<string, unknown>): Array<Record<string, un
 }
 
 function isInterestingRingStatus(code: string, value: unknown): boolean {
+  if (code === 'alarm_message') {
+    return isIpcDoorbellAlarmMessage(value);
+  }
   if (code === 'doorbell_pic' || code === 'movement_detect_pic') {
     return value != null && String(value).trim() !== '' && String(value) !== 'null';
   }

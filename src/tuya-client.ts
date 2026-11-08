@@ -41,6 +41,7 @@ export interface RingSample {
   ringing: boolean;
   code?: string;
   value?: unknown;
+  time?: number;
 }
 
 export interface TuyaProperty {
@@ -48,6 +49,8 @@ export interface TuyaProperty {
   dp_id?: number;
   value: unknown;
   type?: string;
+  /** Tuya cloud update time (ms). Used to edge-detect sticky ring DPs. */
+  time?: number;
 }
 
 export class TuyaApiError extends Error {
@@ -115,6 +118,9 @@ export class TuyaClient {
   private readonly fetchImpl: typeof fetch;
   private readonly now: () => number;
   private token?: TokenCache;
+  /** Sticky ring DPs (alarm_message) keep the last payload — only fire on time/value change. */
+  private ringBaseline = new Map<string, { time: number; fingerprint: string }>();
+  private ringBaselineReady = false;
 
   constructor(private readonly options: TuyaClientOptions) {
     const region = (options.region || DEFAULT_REGION).toLowerCase();
@@ -142,27 +148,63 @@ export class TuyaClient {
 
   /**
    * Detect a visitor ringing the outdoor station.
-   * Tuya `doorbell_active` is usually "" when idle and a non-empty payload when ringing.
+   * Many Gate Cameras leave `doorbell_active` empty and instead write `alarm_message`
+   * with cmd `ipc_doorbell` (sticky). First call baselines sticky DPs so an old ring
+   * does not notify on plugin restart.
    */
   async getRingSample(): Promise<RingSample> {
     const properties = await this.getProperties(this.options.deviceId, this.ringCodes);
+    if (!this.ringBaselineReady) {
+      this.seedRingBaseline(properties);
+      this.ringBaselineReady = true;
+      return { ringing: false };
+    }
+
     for (const code of this.ringCodes) {
       const hit = properties.find((item) => item.code === code);
       if (!hit) {
         continue;
       }
-      // doorbell_pic / alarm_message are often the lasting evidence of a ring.
-      if (code === 'doorbell_pic' || code === 'alarm_message' || code === 'movement_detect_pic') {
-        if (hit.value != null && String(hit.value).trim() !== '' && String(hit.value) !== 'null') {
-          return { ringing: true, code, value: hit.value };
+
+      if (isStickyRingCode(code)) {
+        if (!isStickyRingEvidence(code, hit.value)) {
+          continue;
         }
-        continue;
+        const fingerprint = ringFingerprint(hit.value);
+        const time = Number(hit.time) || 0;
+        const previous = this.ringBaseline.get(code.toLowerCase());
+        const changed =
+          !previous
+          || (time > 0 && time > previous.time)
+          || fingerprint !== previous.fingerprint;
+        if (!changed) {
+          continue;
+        }
+        this.ringBaseline.set(code.toLowerCase(), { time, fingerprint });
+        return { ringing: true, code, value: hit.value, time };
       }
+
       if (isRingActiveValue(hit.value)) {
-        return { ringing: true, code, value: hit.value };
+        return { ringing: true, code, value: hit.value, time: hit.time };
       }
     }
     return { ringing: false };
+  }
+
+  private seedRingBaseline(properties: TuyaProperty[]): void {
+    for (const code of this.ringCodes) {
+      if (!isStickyRingCode(code)) {
+        continue;
+      }
+      const hit = properties.find((item) => item.code === code);
+      if (!hit || !isStickyRingEvidence(code, hit.value)) {
+        continue;
+      }
+      this.ringBaseline.set(code.toLowerCase(), {
+        time: Number(hit.time) || 0,
+        fingerprint: ringFingerprint(hit.value),
+      });
+    }
   }
 
   getModeCode(): string {
@@ -185,7 +227,9 @@ export class TuyaClient {
     const id = deviceId || this.options.deviceId;
     let path = `/v2.0/cloud/thing/${id}/shadow/properties`;
     if (codes && codes.length > 0) {
-      path += `?codes=${encodeURIComponent(codes.join(','))}`;
+      // Keep commas literal — encodeURIComponent(join) turns them into %2C and Tuya
+      // returns no matching properties (ring poll silently never sees alarm_message).
+      path += `?codes=${codes.map((code) => encodeURIComponent(code)).join(',')}`;
     }
     const response = await this.request('GET', path);
     if (!response.success) {
@@ -531,4 +575,75 @@ export function isRingActiveValue(value: unknown): boolean {
     return false;
   }
   return true;
+}
+
+function isStickyRingCode(code: string): boolean {
+  const lower = code.toLowerCase();
+  return lower === 'alarm_message' || lower === 'doorbell_pic' || lower === 'movement_detect_pic';
+}
+
+/** Sticky DPs that prove a doorbell press (not motion-only). */
+export function isStickyRingEvidence(code: string, value: unknown): boolean {
+  if (value == null || String(value).trim() === '' || String(value) === 'null') {
+    return false;
+  }
+  if (code.toLowerCase() === 'alarm_message') {
+    return isIpcDoorbellAlarmMessage(value);
+  }
+  return true;
+}
+
+/**
+ * Gate Camera doorbell events arrive as base64 JSON in alarm_message:
+ * {"cmd":"ipc_doorbell","type":"image",...}
+ */
+export function isIpcDoorbellAlarmMessage(value: unknown): boolean {
+  const decoded = decodeAlarmMessage(value);
+  if (!decoded) {
+    return false;
+  }
+  const cmd = String(decoded.cmd || decoded.etype || decoded.type || '').toLowerCase();
+  return cmd.includes('doorbell') || cmd.includes('door_bell');
+}
+
+export function decodeAlarmMessage(value: unknown): Record<string, unknown> | undefined {
+  if (value == null) {
+    return undefined;
+  }
+  if (typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  const raw = String(value).trim();
+  if (!raw) {
+    return undefined;
+  }
+  try {
+    const asJson = JSON.parse(raw) as unknown;
+    if (asJson && typeof asJson === 'object') {
+      return asJson as Record<string, unknown>;
+    }
+  } catch {
+    // base64 payload
+  }
+  try {
+    const text = Buffer.from(raw, 'base64').toString('utf8');
+    const parsed = JSON.parse(text) as unknown;
+    if (parsed && typeof parsed === 'object') {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
+function ringFingerprint(value: unknown): string {
+  if (typeof value === 'string') {
+    return value;
+  }
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
 }
