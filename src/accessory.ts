@@ -10,8 +10,6 @@ export interface GateAccessoryOptions {
   showModes: boolean;
   modePollSeconds: number;
   showRingSensor: boolean;
-  /** Momentary switch: trip Home ring motion only (cannot drive the physical intercom). */
-  showTestRingSwitch: boolean;
   ringPollSeconds: number;
   ringHoldSeconds: number;
   /** Enable Tuya Message Service push (needed for reliable rings). */
@@ -26,7 +24,6 @@ export interface GateAccessoryOptions {
 export class GateAccessory {
   private readonly lockService: Service;
   private readonly switchService?: Service;
-  private readonly testRingService?: Service;
   private readonly ringService?: Service;
   private readonly modeServices = new Map<GateMode, Service>();
   private busy = false;
@@ -48,7 +45,7 @@ export class GateAccessory {
     private readonly options: GateAccessoryOptions,
   ) {
     const { Characteristic, Service } = this.platform;
-    const { displayName, showSwitch, showModes, showRingSensor, showTestRingSwitch } = options;
+    const { displayName, showSwitch, showModes, showRingSensor } = options;
 
     this.accessory.getService(Service.AccessoryInformation)
       ?.setCharacteristic(Characteristic.Manufacturer, 'Tuya')
@@ -89,10 +86,7 @@ export class GateAccessory {
 
     this.setupModeSwitches(showModes);
     this.ringService = this.setupRingSensor(showRingSensor, displayName);
-    this.testRingService = this.setupTestRingSwitch(
-      showRingSensor && showTestRingSwitch,
-      displayName,
-    );
+    this.removeLegacyTestRingSwitches();
 
     if (showModes) {
       void this.bootstrapModes();
@@ -106,8 +100,7 @@ export class GateAccessory {
       this.platform.log.info(
         `[${displayName}] ring sensor on — codes ${this.client.getRingCodes().join(', ')}; `
           + `poll every ${options.ringPollSeconds}s`
-          + (options.ringPush ? '; Message Service push enabled' : '')
-          + (showTestRingSwitch ? '; Test Notify switch on' : ''),
+          + (options.ringPush ? '; Message Service push enabled' : ''),
       );
       this.platform.log.info(
         `[${displayName}] Home phone alerts need an automation: `
@@ -225,41 +218,15 @@ export class GateAccessory {
     return service;
   }
 
-  private setupTestRingSwitch(enabled: boolean, displayName: string): Service | undefined {
-    const { Characteristic, Service } = this.platform;
-    const existing = this.accessory.getServiceById(Service.Switch, 'test-ring-switch')
-      || this.accessory.getServiceById(Service.Switch, 'simulate-ring-switch');
-    if (!enabled) {
+  /** Drop Simulate/Test Ring switches left over from older plugin versions. */
+  private removeLegacyTestRingSwitches(): void {
+    const { Service } = this.platform;
+    for (const subtype of ['test-ring-switch', 'simulate-ring-switch']) {
+      const existing = this.accessory.getServiceById(Service.Switch, subtype);
       if (existing) {
         this.accessory.removeService(existing);
       }
-      return undefined;
     }
-    // Local Home notify test only — Tuya Gate Cameras cannot be told to ring from cloud.
-    const label = `${displayName} Test Notify`;
-    const service = existing || this.accessory.addService(Service.Switch, label, 'test-ring-switch');
-    service.setCharacteristic(Characteristic.Name, label);
-    if ('ConfiguredName' in Characteristic) {
-      try {
-        service.setCharacteristic(Characteristic.ConfiguredName, label);
-      } catch {
-        // older HAP
-      }
-    }
-    this.lockService.addLinkedService(service);
-    service.updateCharacteristic(Characteristic.On, false);
-    service.getCharacteristic(Characteristic.On)
-      .onGet(() => false)
-      .onSet(async (value) => {
-        if (!value) {
-          return;
-        }
-        this.markRinging('test-notify');
-        setTimeout(() => {
-          service.updateCharacteristic(Characteristic.On, false);
-        }, 500);
-      });
-    return service;
   }
 
   private async pollRing(): Promise<void> {

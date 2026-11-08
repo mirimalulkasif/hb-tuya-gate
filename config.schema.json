@@ -3,7 +3,7 @@
   "pluginType": "platform",
   "singular": true,
   "headerDisplay": "Opens a Tuya Gate Camera from HomeKit, and can notify you when someone rings (motion sensor). Optional At Home / Not at Home / Dormant switches.",
-  "footerDisplay": "Important: phone alerts need a Home automation (Open Gate Ring → Notify). The physical intercom chime can only come from the outdoor button — cloud/HomeKit cannot trigger it. Optional Test Notify switch only trips Home motion. Leave showModes off unless you confirmed a cloud mode DP.",
+  "footerDisplay": "Important: phone alerts need a Home automation (Open Gate Ring → Notify). The physical intercom chime can only come from the outdoor button — cloud/HomeKit cannot trigger it. Leave showModes off unless you confirmed a cloud mode DP.",
   "schema": {
     "type": "object",
     "properties": {
@@ -111,12 +111,6 @@
         "type": "boolean",
         "default": true,
         "description": "Motion sensor that trips when someone rings. Use a Home automation to get a notification."
-      },
-      "showTestRingSwitch": {
-        "title": "Show Test Notify switch",
-        "type": "boolean",
-        "default": false,
-        "description": "Momentary switch that trips the ring motion sensor for Home notification testing only. Cannot make the physical intercom ring."
       },
       "ringCode": {
         "title": "Ring DP code",

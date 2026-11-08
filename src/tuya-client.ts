@@ -192,55 +192,6 @@ export class TuyaClient {
     return { ringing: false };
   }
 
-  /**
-   * Push a synthetic visitor-ring into Tuya cloud (same shape as outdoor Alarm Report).
-   * Many Gate Cameras treat alarm_message as report-only — may throw TuyaApiError.
-   */
-  async simulateVisitorRing(): Promise<{ code: string; value: string }> {
-    const stamp = this.now();
-    const payload = {
-      v: '5.0',
-      cmd: 'ipc_doorbell',
-      type: 'image',
-      with: 'resources',
-      source: 'homebridge-tuya-gate',
-      files: [[
-        'ty-eu-storage30-pic',
-        `/simulate/homekit/${stamp}.jpeg`,
-        'homekit',
-        String(Math.floor(stamp / 1000)),
-      ]],
-    };
-    const value = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64');
-    // Prefer alarm_message (what this Gate Camera reports on a real ring).
-    try {
-      await this.issueProperty(this.options.deviceId, 'alarm_message', value);
-      this.noteSimulatedStickyRing('alarm_message', value, stamp);
-      return { code: 'alarm_message', value };
-    } catch (alarmError) {
-      try {
-        await this.issueProperty(this.options.deviceId, 'doorbell_active', `homekit-ring-${stamp}`);
-        return { code: 'doorbell_active', value: `homekit-ring-${stamp}` };
-      } catch {
-        throw alarmError instanceof Error
-          ? alarmError
-          : new TuyaApiError('Tuya rejected simulated ring write');
-      }
-    }
-  }
-
-  /** Keep edge detection in sync after we ourselves wrote a sticky ring DP. */
-  private noteSimulatedStickyRing(code: string, value: string, time: number): void {
-    if (!isStickyRingCode(code)) {
-      return;
-    }
-    this.ringBaseline.set(code.toLowerCase(), {
-      time,
-      fingerprint: ringFingerprint(value),
-    });
-    this.ringBaselineReady = true;
-  }
-
   /** Snapshot for startup logs — proves we can see alarm_message from cloud. */
   async describeRingWatch(): Promise<string> {
     const properties = await this.getProperties(this.options.deviceId);

@@ -107,25 +107,6 @@ test('ring motion sensor trips when Tuya reports a visitor call', async () => {
   }
 });
 
-test('Test Notify switch trips motion locally', async () => {
-  const { accessories, launch, platform, shutdown } = createPlatform({
-    config: { showRingSensor: true, showTestRingSwitch: true, ringPush: false },
-  });
-  try {
-    launch();
-    await platform.ready;
-    const motion = accessories[0].getServiceById(hap.Service.MotionSensor, 'gate-ring');
-    const testSwitch = accessories[0].getServiceById(hap.Service.Switch, 'test-ring-switch')
-      || accessories[0].getServiceById(hap.Service.Switch, 'simulate-ring-switch');
-    assert.ok(motion);
-    assert.ok(testSwitch);
-    await setCharacteristic(testSwitch.getCharacteristic(hap.Characteristic.On), true);
-    assert.equal(motion.getCharacteristic(hap.Characteristic.MotionDetected).value, true);
-  } finally {
-    shutdown();
-  }
-});
-
 test('mode switches set intercom home/out/dormant (not an alarm)', async () => {
   const modes = [];
   const { accessories, launch, platform, shutdown } = createPlatform({
@@ -163,7 +144,7 @@ test('mode switches set intercom home/out/dormant (not an alarm)', async () => {
   }
 });
 
-function createPlatform({ openGate, getMode, setMode, getRingSample, simulateVisitorRing, config = {} }) {
+function createPlatform({ openGate, getMode, setMode, getRingSample, config = {} }) {
   const accessories = [];
   let launch = () => {};
   let shutdown = () => {};
@@ -208,7 +189,6 @@ function createPlatform({ openGate, getMode, setMode, getRingSample, simulateVis
     getRingCodes: () => ['doorbell_active'],
     getRingSample: getRingSample || (async () => ({ ringing: false })),
     describeRingWatch: async () => 'doorbell_active="" | alarm_message time=? ipc_doorbell=no',
-    simulateVisitorRing: simulateVisitorRing || (async () => ({ code: 'alarm_message', value: 'x' })),
   }));
 
   return { accessories, launch, platform, shutdown };
