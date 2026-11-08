@@ -151,6 +151,16 @@ export class RingWatcher extends EventEmitter {
     }
 
     const statuses = extractStatuses(data);
+    if (statuses.length > 0) {
+      const summary = statuses
+        .map((status) => `${status.code || status.dpCode}=${JSON.stringify(status.value)}`)
+        .join(', ');
+      this.log(`Device push: ${summary}`);
+    } else {
+      // Help diagnose unexpected message shapes when someone rings.
+      this.log(`Device push (raw keys): ${Object.keys(data).join(', ')}`);
+    }
+
     for (const status of statuses) {
       const code = String(status.code || status.dpCode || '').toLowerCase();
       if (!code || !this.ringCodes.has(code)) {
