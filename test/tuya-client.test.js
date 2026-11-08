@@ -44,13 +44,21 @@ test('openGate uses v2 shadow properties issue, not v1 commands', async () => {
   );
 });
 
-test('discoverModeProperty prefers call_mode over motion_sensitivity', () => {
+test('discoverModeProperty ignores motion_sensitivity and record_mode', () => {
   const code = discoverModeProperty([
     { code: 'motion_sensitivity', value: '2', dp_id: 106 },
-    { code: 'call_mode', value: '1', dp_id: 151 },
+    { code: 'record_mode', value: '1', dp_id: 151 },
     { code: 'basic_nightvision', value: '0', dp_id: 108 },
   ], { home: '0', out: '1', dormant: '2' });
-  assert.equal(code, 'call_mode');
+  assert.equal(code, undefined);
+});
+
+test('discoverModeProperty accepts clear At Home labels', () => {
+  const code = discoverModeProperty([
+    { code: 'motion_sensitivity', value: '2', dp_id: 106 },
+    { code: 'work_mode', value: 'at_home', dp_id: 200 },
+  ], { home: '0', out: '1', dormant: '2' });
+  assert.equal(code, 'work_mode');
 });
 
 test('setMode tries values and verifies readback', async () => {

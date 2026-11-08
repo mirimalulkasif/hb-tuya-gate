@@ -62,18 +62,18 @@
       "showModes": {
         "title": "Show At Home / Not at Home / Dormant",
         "type": "boolean",
-        "default": true,
-        "description": "On (default): three switches matching the Tuya intercom modes. Not a security alarm."
+        "default": false,
+        "description": "Off by default. Turn on only if you confirmed a cloud DP that changes when you switch mode in the Tuya app (many intercoms keep mode local-only)."
       },
       "modeDeviceId": {
         "title": "Mode device ID (optional)",
         "type": "string",
-        "description": "If At Home / Not at Home / Dormant is on the indoor monitor (not the Gate Camera), put that device’s ID here. Leave blank to use the Gate Camera device ID."
+        "description": "Only if mode is on another Tuya device id. Leave blank to use the Gate Camera id."
       },
       "modeCode": {
-        "title": "Mode DP code (optional)",
+        "title": "Mode DP code (required if showModes)",
         "type": "string",
-        "description": "Tuya property code for indoor mode. Leave blank to auto-detect. Check Homebridge logs for “mode-like properties” after restart."
+        "description": "Exact property code from Query properties that changes with At Home / Not at Home / Dormant. Do not use motion_sensitivity or record_mode."
       },
       "modeHomeValue": {
         "title": "At Home value",

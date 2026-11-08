@@ -77,7 +77,8 @@ export class TuyaGatePlatform implements DynamicPlatformPlugin {
 
     const client = this.clientFactory(this.config);
     const showSwitch = this.config.showSwitch === true;
-    const showModes = this.config.showModes !== false;
+    // Off by default: many Gate Cameras do not expose ring mode over Tuya cloud.
+    const showModes = this.config.showModes === true;
     const modePollSeconds = Number(this.config.modePollSeconds) || 120;
 
     this.accessoryHandler = new GateAccessory(this, accessory, client, {

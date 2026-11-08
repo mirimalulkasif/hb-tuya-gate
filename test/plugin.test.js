@@ -69,10 +69,24 @@ test('showSwitch true exposes a momentary switch that opens the gate', async () 
   }
 });
 
+test('mode switches are off unless showModes is enabled', async () => {
+  const { accessories, launch, platform, shutdown } = createPlatform({
+    config: { showModes: false },
+    openGate: async () => undefined,
+  });
+  try {
+    launch();
+    await platform.ready;
+    assert.equal(accessories[0].getServiceById(hap.Service.Switch, 'mode-home'), undefined);
+  } finally {
+    shutdown();
+  }
+});
+
 test('mode switches set intercom home/out/dormant (not an alarm)', async () => {
   const modes = [];
   const { accessories, launch, platform, shutdown } = createPlatform({
-    config: { showModes: true },
+    config: { showModes: true, modeCode: 'call_mode' },
     openGate: async () => undefined,
     getMode: async () => 'home',
     setMode: async (mode) => {

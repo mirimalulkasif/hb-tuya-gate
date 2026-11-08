@@ -8,7 +8,7 @@ Homebridge plugin for a **Tuya Gate Camera / video intercom** in Apple Home.
 ## What you get in Home
 
 - **Lock** (always) — Unlock opens the gate, then returns to Locked
-- **At Home** / **Not at Home** / **Dormant** — ring mode (default on)
+- **At Home** / **Not at Home** / **Dormant** — optional; only if a cloud DP exists (often the wall unit keeps mode local-only)
 - **Switch** (optional) — momentary open pulse; enable with `showSwitch`
 
 | Switch | Typical behaviour (Tuya app) |
@@ -53,7 +53,7 @@ Restart the plugin / child bridge, then configure **Tuya Gate**.
       "region": "eu",
       "lockCode": "accessory_lock",
       "showSwitch": false,
-      "showModes": true,
+      "showModes": false,
       "warmupStream": true
     }
   ]
@@ -62,17 +62,15 @@ Restart the plugin / child bridge, then configure **Tuya Gate**.
 
 | Option | Meaning |
 |--------|---------|
-| `showModes` | Default `true` — At Home / Not at Home / Dormant |
-| `modeCode` | Optional Tuya DP code. Leave blank to auto-detect |
-| `modeHomeValue` / `modeOutValue` / `modeDormantValue` | Defaults `at_home` / `not_at_home` / `dormant` — override if Query properties shows different strings |
+| `showModes` | Default `false`. Enable only after you find a cloud DP for mode |
+| `modeCode` | Required when `showModes` is on — exact property `code` from Query properties |
+| `modeHomeValue` / `modeOutValue` / `modeDormantValue` | Exact values for that DP |
 | `showSwitch` | Extra momentary open switch |
 | `warmupStream` | Allocate RTSP before open (helps some cameras) |
 
 ### If modes don’t change on the device
 
-1. Restart the plugin and check logs for `mode-like properties: …` and `device confirmed mode …` (or an error).
-2. Modes are sometimes on the **indoor monitor** device, not the Gate Camera — set **Mode device ID** to that id.
-3. Or in Tuya **API Explorer → Query properties**, change At Home / Not at Home / Dormant in the app, note which `code`/`value` changed, and set **Mode DP code** + the three values.
+Many Tuya Gate Camera kits keep **At Home / Not at Home / Dormant** only on the indoor monitor (local UI). If Query properties does **not** change when you switch mode on the wall unit **or** in the Tuya app, Homebridge cannot control it — leave `showModes` off and use the lock only.
 
 ## License
 

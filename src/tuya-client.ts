@@ -83,6 +83,9 @@ const MODE_CODE_BLOCKLIST = [
   'motion_switch',
   'basic_flip',
   'basic_osd',
+  'record_mode',
+  'record_switch',
+  'basic_indicator',
 ];
 
 /**
@@ -104,7 +107,7 @@ export class TuyaClient {
     const region = (options.region || DEFAULT_REGION).toLowerCase();
     this.host = REGION_HOSTS[region] || REGION_HOSTS[DEFAULT_REGION];
     this.lockCode = options.lockCode || DEFAULT_LOCK_CODE;
-    this.modeCode = options.modeCode || DEFAULT_MODE_CODE;
+    this.modeCode = (options.modeCode || DEFAULT_MODE_CODE).trim();
     this.configuredModeValues = {
       home: options.modeHomeValue || DEFAULT_MODE_HOME,
       out: options.modeOutValue || DEFAULT_MODE_OUT,
@@ -174,6 +177,12 @@ export class TuyaClient {
 
   async setMode(mode: GateMode): Promise<void> {
     await this.ensureModeCode();
+    if (!this.modeCode || MODE_CODE_BLOCKLIST.includes(this.modeCode.toLowerCase())) {
+      throw new TuyaApiError(
+        'Intercom ring mode is not available on this Tuya device via cloud. '
+          + 'Set modeCode only if Query properties changes when you switch At Home / Not at Home / Dormant in the Tuya app.',
+      );
+    }
     const deviceId = this.getModeDeviceId();
     const candidates = this.valueCandidatesFor(mode);
     let lastError: unknown;
@@ -208,17 +217,19 @@ export class TuyaClient {
    */
   async ensureModeCode(): Promise<string> {
     if (this.options.modeCode) {
-      this.modeCode = this.options.modeCode;
+      this.modeCode = this.options.modeCode.trim();
       return this.modeCode;
     }
+    // Do not auto-pick motion_sensitivity / record_mode / etc. — require an explicit modeCode
+    // unless a property already holds a clear At Home / Not at Home / Dormant label.
     try {
       const properties = await this.getProperties(this.getModeDeviceId());
       const discovered = discoverModeProperty(properties, this.configuredModeValues);
-      if (discovered) {
+      if (discovered && !MODE_CODE_BLOCKLIST.includes(discovered.toLowerCase())) {
         this.modeCode = discovered;
       }
     } catch {
-      // Keep configured/default code.
+      // leave empty
     }
     return this.modeCode;
   }
@@ -383,15 +394,7 @@ export function discoverModeProperty(
     (property) => !MODE_CODE_BLOCKLIST.includes(property.code.toLowerCase()),
   );
 
-  // Prefer known mode DP names (call_mode is common on Tuya gate cameras).
-  for (const candidate of MODE_CODE_CANDIDATES) {
-    const hit = usable.find((property) => property.code.toLowerCase() === candidate);
-    if (hit) {
-      return hit.code;
-    }
-  }
-
-  // Only match string labels — NOT bare 0/1/2 (those collide with motion_sensitivity etc.).
+  // Only match clear string labels (At Home / Not at Home / Dormant). Never bare 0/1/2.
   const aliases = new Set(
     [
       modeValues.home,
@@ -419,10 +422,17 @@ export function discoverModeProperty(
     }
   }
 
-  const preferred = usable.find((property) =>
-    /call_mode|doorbell_mode|work_mode|indoor_mode|leave_home|dormant/i.test(property.code),
-  );
-  return preferred?.code;
+  // Prefer exact known mode DP names only if present (still better than guessing enums).
+  for (const candidate of MODE_CODE_CANDIDATES) {
+    if (candidate === 'mode') {
+      continue; // too generic
+    }
+    const hit = usable.find((property) => property.code.toLowerCase() === candidate);
+    if (hit) {
+      return hit.code;
+    }
+  }
+  return undefined;
 }
 
 function valuesEqual(a: unknown, b: unknown): boolean {

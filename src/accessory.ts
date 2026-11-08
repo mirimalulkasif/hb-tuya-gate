@@ -186,7 +186,7 @@ export class GateAccessory {
       if (!mode) {
         this.platform.log.warn(
           `[${this.options.displayName}] could not read intercom mode (${reason}). `
-            + `Set modeCode in config from the device shadow properties if needed.`,
+            + 'If the wall unit mode does not change any Query properties value, Tuya cloud cannot control it — leave showModes off.',
         );
         return;
       }

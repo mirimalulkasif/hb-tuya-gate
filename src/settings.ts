@@ -3,13 +3,12 @@ export const PLUGIN_NAME = 'homebridge-tuya-gate';
 
 export const DEFAULT_LOCK_CODE = 'accessory_lock';
 export const DEFAULT_REGION = 'eu';
-/** Common on Tuya Gate Camera / intercom (DP 151). */
-export const DEFAULT_MODE_CODE = 'call_mode';
-
 /**
- * Typical call_mode enums: 0 = At Home, 1 = Not at Home, 2 = Dormant.
- * Override in config if Query properties shows different values.
+ * Must be set explicitly for most Gate Cameras — local At Home / Not at Home /
+ * Dormant on the indoor monitor often never appears in cloud shadow properties.
  */
+export const DEFAULT_MODE_CODE = '';
+
 export const DEFAULT_MODE_HOME = '0';
 export const DEFAULT_MODE_OUT = '1';
 export const DEFAULT_MODE_DORMANT = '2';
