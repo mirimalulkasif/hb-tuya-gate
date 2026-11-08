@@ -88,11 +88,13 @@ export class GateAccessory {
   }
 
   private setupModeSwitches(enabled: boolean): void {
-    const { Service } = this.platform;
+    const { Characteristic, Service } = this.platform;
+    // Distinct labels — Home often shows the accessory name ("Open Gate") for every
+    // linked switch unless the service Name is clearly different.
     const modes: Array<{ mode: GateMode; subtype: string; label: string }> = [
-      { mode: 'home', subtype: 'mode-home', label: 'Home' },
-      { mode: 'out', subtype: 'mode-out', label: 'Out' },
-      { mode: 'dormant', subtype: 'mode-dormant', label: 'Dormant' },
+      { mode: 'home', subtype: 'mode-home', label: 'Intercom Home (ring)' },
+      { mode: 'out', subtype: 'mode-out', label: 'Intercom Out' },
+      { mode: 'dormant', subtype: 'mode-dormant', label: 'Intercom Dormant (silent)' },
     ];
 
     for (const entry of modes) {
@@ -104,13 +106,18 @@ export class GateAccessory {
         continue;
       }
       const service = existing
-        || this.accessory.addService(
-          Service.Switch,
-          `${this.options.displayName} ${entry.label}`,
-          entry.subtype,
-        );
-      service.setCharacteristic(this.platform.Characteristic.Name, `${this.options.displayName} ${entry.label}`);
-      service.getCharacteristic(this.platform.Characteristic.On)
+        || this.accessory.addService(Service.Switch, entry.label, entry.subtype);
+      service.displayName = entry.label;
+      service.setCharacteristic(Characteristic.Name, entry.label);
+      // ConfiguredName is what modern Home apps show / allow renaming.
+      if ('ConfiguredName' in Characteristic) {
+        try {
+          service.setCharacteristic(Characteristic.ConfiguredName, entry.label);
+        } catch {
+          // Older HAP builds may not allow ConfiguredName on Switch.
+        }
+      }
+      service.getCharacteristic(Characteristic.On)
         .onGet(() => this.currentMode === entry.mode)
         .onSet((value) => this.setModeSwitch(entry.mode, value));
       this.modeServices.set(entry.mode, service);

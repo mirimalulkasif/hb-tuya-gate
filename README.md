@@ -8,14 +8,16 @@ Homebridge plugin for a **Tuya Gate Camera / video intercom** in Apple Home.
 ## What you get in Home
 
 - **Lock** (always) — Unlock opens the gate, then returns to Locked
-- **Home / Out / Dormant** (default on) — sets the intercom ring mode
+- **Intercom Home (ring)** / **Intercom Out** / **Intercom Dormant (silent)** — ring mode (default on)
 - **Switch** (optional) — momentary open pulse; enable with `showSwitch`
 
-| Mode | Typical behaviour (Tuya app) |
-|------|------------------------------|
-| **Home** | Indoor monitor rings; app notified |
-| **Out** | Visitor prompted / message; app notified |
-| **Dormant** | Indoor silent; app can still get the call |
+| Switch | Typical behaviour (Tuya app) |
+|--------|------------------------------|
+| **Intercom Home (ring)** | Indoor monitor rings; app notified |
+| **Intercom Out** | Visitor prompted / message; app notified |
+| **Intercom Dormant (silent)** | Indoor silent; app can still get the call |
+
+Only one mode switch should stay on at a time.
 
 ## Requirements
 
