@@ -10,6 +10,8 @@ export interface GateAccessoryOptions {
   showModes: boolean;
   modePollSeconds: number;
   showRingSensor: boolean;
+  /** Momentary switch that trips the ring motion sensor (Home notify test). */
+  showTestRingSwitch: boolean;
   ringPollSeconds: number;
   ringHoldSeconds: number;
   /** Enable Tuya Message Service push (needed for reliable rings). */
@@ -24,6 +26,7 @@ export interface GateAccessoryOptions {
 export class GateAccessory {
   private readonly lockService: Service;
   private readonly switchService?: Service;
+  private readonly testRingService?: Service;
   private readonly ringService?: Service;
   private readonly modeServices = new Map<GateMode, Service>();
   private busy = false;
@@ -36,6 +39,7 @@ export class GateAccessory {
   private ringing = false;
   private ringPollInFlight = false;
   private lastPollSnapshot = '';
+  private ringPollCount = 0;
 
   constructor(
     private readonly platform: TuyaGatePlatform,
@@ -44,7 +48,7 @@ export class GateAccessory {
     private readonly options: GateAccessoryOptions,
   ) {
     const { Characteristic, Service } = this.platform;
-    const { displayName, showSwitch, showModes, showRingSensor } = options;
+    const { displayName, showSwitch, showModes, showRingSensor, showTestRingSwitch } = options;
 
     this.accessory.getService(Service.AccessoryInformation)
       ?.setCharacteristic(Characteristic.Manufacturer, 'Tuya')
@@ -85,6 +89,10 @@ export class GateAccessory {
 
     this.setupModeSwitches(showModes);
     this.ringService = this.setupRingSensor(showRingSensor, displayName);
+    this.testRingService = this.setupTestRingSwitch(
+      showRingSensor && showTestRingSwitch,
+      displayName,
+    );
 
     if (showModes) {
       void this.bootstrapModes();
@@ -98,16 +106,33 @@ export class GateAccessory {
       this.platform.log.info(
         `[${displayName}] ring sensor on — codes ${this.client.getRingCodes().join(', ')}; `
           + `poll every ${options.ringPollSeconds}s`
-          + (options.ringPush ? '; Message Service push enabled' : ''),
+          + (options.ringPush ? '; Message Service push enabled' : '')
+          + (showTestRingSwitch ? '; Test Ring switch on' : ''),
+      );
+      this.platform.log.info(
+        `[${displayName}] Home phone alerts need an automation: `
+          + `when “${displayName} Ring” detects motion → Notify`,
       );
       if (options.ringPush) {
         this.startRingPush();
       }
+      void this.logRingWatch();
       void this.pollRing();
       const pollMs = Math.max(1, options.ringPollSeconds) * 1000;
       this.ringTimer = setInterval(() => {
         void this.pollRing();
       }, pollMs);
+    }
+  }
+
+  private async logRingWatch(): Promise<void> {
+    try {
+      const summary = await this.client.describeRingWatch();
+      this.platform.log.info(`[${this.options.displayName}] ring watch: ${summary}`);
+    } catch (error) {
+      this.platform.log.warn(
+        `[${this.options.displayName}] ring watch failed: ${errorMessage(error)}`,
+      );
     }
   }
 
@@ -200,11 +225,47 @@ export class GateAccessory {
     return service;
   }
 
+  private setupTestRingSwitch(enabled: boolean, displayName: string): Service | undefined {
+    const { Characteristic, Service } = this.platform;
+    const existing = this.accessory.getServiceById(Service.Switch, 'test-ring-switch');
+    if (!enabled) {
+      if (existing) {
+        this.accessory.removeService(existing);
+      }
+      return undefined;
+    }
+    const label = `${displayName} Test Ring`;
+    const service = existing || this.accessory.addService(Service.Switch, label, 'test-ring-switch');
+    service.setCharacteristic(Characteristic.Name, label);
+    if ('ConfiguredName' in Characteristic) {
+      try {
+        service.setCharacteristic(Characteristic.ConfiguredName, label);
+      } catch {
+        // older HAP
+      }
+    }
+    this.lockService.addLinkedService(service);
+    service.updateCharacteristic(Characteristic.On, false);
+    service.getCharacteristic(Characteristic.On)
+      .onGet(() => false)
+      .onSet(async (value) => {
+        if (!value) {
+          return;
+        }
+        this.markRinging('test-switch');
+        setTimeout(() => {
+          service.updateCharacteristic(Characteristic.On, false);
+        }, 500);
+      });
+    return service;
+  }
+
   private async pollRing(): Promise<void> {
     if (this.ringPollInFlight || !this.ringService) {
       return;
     }
     this.ringPollInFlight = true;
+    this.ringPollCount += 1;
     try {
       const sample = await this.client.getRingSample();
       const snapshot = `${sample.code || ''}:${sample.time || ''}:${JSON.stringify(sample.value ?? '')}`;
@@ -217,6 +278,9 @@ export class GateAccessory {
       this.lastPollSnapshot = snapshot;
       if (sample.ringing) {
         this.markRinging(`${sample.code || 'ring'}/poll`);
+      } else if (this.ringPollCount === 2 || this.ringPollCount % 60 === 0) {
+        // After baseline + first real poll, and ~every 2 min at 2s interval.
+        void this.logRingWatch();
       }
     } catch (error) {
       this.platform.log.warn(`[${this.options.displayName}] ring poll: ${errorMessage(error)}`);

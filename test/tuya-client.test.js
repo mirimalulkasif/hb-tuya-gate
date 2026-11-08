@@ -210,6 +210,8 @@ test('getRingSample edges on newer alarm_message ipc_doorbell', async () => {
     if (String(url).includes('/token')) {
       return jsonResponse({ success: true, result: { access_token: 'tok', expire_time: 7200 } });
     }
+    // Full shadow (no codes=) — production ring poll path.
+    assert.equal(String(url).includes('codes='), false);
     return jsonResponse({
       success: true,
       result: {
@@ -233,6 +235,34 @@ test('getRingSample edges on newer alarm_message ipc_doorbell', async () => {
   const sample = await client.getRingSample();
   assert.equal(sample.ringing, true);
   assert.equal(sample.code, 'alarm_message');
+});
+
+test('describeRingWatch summarizes ipc_doorbell alarm_message', async () => {
+  const alarm = Buffer.from(JSON.stringify({ cmd: 'ipc_doorbell' })).toString('base64');
+  const fetchImpl = async (url) => {
+    if (String(url).includes('/token')) {
+      return jsonResponse({ success: true, result: { access_token: 'tok', expire_time: 7200 } });
+    }
+    return jsonResponse({
+      success: true,
+      result: {
+        properties: [
+          { code: 'doorbell_active', value: '', dp_id: 136 },
+          { code: 'alarm_message', value: alarm, dp_id: 185, time: 99 },
+        ],
+      },
+    });
+  };
+  const client = new TuyaClient({
+    accessId: 'id',
+    accessSecret: 'secret',
+    deviceId: 'dev123',
+    fetchImpl,
+    now: () => 1,
+  });
+  const summary = await client.describeRingWatch();
+  assert.match(summary, /ipc_doorbell=yes/);
+  assert.match(summary, /time=99/);
 });
 
 function jsonResponse(payload) {

@@ -153,7 +153,8 @@ export class TuyaClient {
    * does not notify on plugin restart.
    */
   async getRingSample(): Promise<RingSample> {
-    const properties = await this.getProperties(this.options.deviceId, this.ringCodes);
+    // Fetch full shadow (not ?codes=) — filtered queries are flaky on some Gate Cameras.
+    const properties = await this.getProperties(this.options.deviceId);
     if (!this.ringBaselineReady) {
       this.seedRingBaseline(properties);
       this.ringBaselineReady = true;
@@ -189,6 +190,29 @@ export class TuyaClient {
       }
     }
     return { ringing: false };
+  }
+
+  /** Snapshot for startup logs — proves we can see alarm_message from cloud. */
+  async describeRingWatch(): Promise<string> {
+    const properties = await this.getProperties(this.options.deviceId);
+    const parts: string[] = [];
+    for (const code of this.ringCodes) {
+      const hit = properties.find((item) => item.code === code);
+      if (!hit) {
+        continue;
+      }
+      if (code.toLowerCase() === 'alarm_message') {
+        const doorbell = isIpcDoorbellAlarmMessage(hit.value);
+        parts.push(
+          `alarm_message time=${hit.time ?? '?'} ipc_doorbell=${doorbell ? 'yes' : 'no'}`,
+        );
+      } else if (code.toLowerCase() === 'doorbell_active') {
+        parts.push(`doorbell_active=${JSON.stringify(hit.value ?? '')}`);
+      } else if (hit.value != null && String(hit.value).trim() !== '') {
+        parts.push(`${code}=set time=${hit.time ?? '?'}`);
+      }
+    }
+    return parts.length > 0 ? parts.join(' | ') : 'no ring DPs in shadow properties';
   }
 
   private seedRingBaseline(properties: TuyaProperty[]): void {
