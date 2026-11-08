@@ -10,7 +10,7 @@ export interface GateAccessoryOptions {
   showModes: boolean;
   modePollSeconds: number;
   showRingSensor: boolean;
-  /** Momentary switch: try writing ipc_doorbell to Tuya, then trip Home motion. */
+  /** Momentary switch: trip Home ring motion only (cannot drive the physical intercom). */
   showTestRingSwitch: boolean;
   ringPollSeconds: number;
   ringHoldSeconds: number;
@@ -107,7 +107,7 @@ export class GateAccessory {
         `[${displayName}] ring sensor on — codes ${this.client.getRingCodes().join(', ')}; `
           + `poll every ${options.ringPollSeconds}s`
           + (options.ringPush ? '; Message Service push enabled' : '')
-          + (showTestRingSwitch ? '; Simulate Ring switch on' : ''),
+          + (showTestRingSwitch ? '; Test Notify switch on' : ''),
       );
       this.platform.log.info(
         `[${displayName}] Home phone alerts need an automation: `
@@ -235,9 +235,9 @@ export class GateAccessory {
       }
       return undefined;
     }
-    // Label: Simulate Ring — writes the same ipc_doorbell Alarm Report Tuya shows on a real ring.
-    const label = `${displayName} Simulate Ring`;
-    const service = existing || this.accessory.addService(Service.Switch, label, 'simulate-ring-switch');
+    // Local Home notify test only — Tuya Gate Cameras cannot be told to ring from cloud.
+    const label = `${displayName} Test Notify`;
+    const service = existing || this.accessory.addService(Service.Switch, label, 'test-ring-switch');
     service.setCharacteristic(Characteristic.Name, label);
     if ('ConfiguredName' in Characteristic) {
       try {
@@ -254,20 +254,7 @@ export class GateAccessory {
         if (!value) {
           return;
         }
-        try {
-          const written = await this.client.simulateVisitorRing();
-          this.platform.log.info(
-            `[${this.options.displayName}] Simulate Ring wrote ${written.code} to Tuya`,
-          );
-          this.markRinging(`${written.code}/simulate`);
-        } catch (error) {
-          this.platform.log.warn(
-            `[${this.options.displayName}] Simulate Ring: Tuya rejected the write `
-              + `(${errorMessage(error)}). Tripping Home motion locally only — `
-              + `outdoor/indoor chime cannot be faked from cloud on this device.`,
-          );
-          this.markRinging('local-fallback');
-        }
+        this.markRinging('test-notify');
         setTimeout(() => {
           service.updateCharacteristic(Characteristic.On, false);
         }, 500);

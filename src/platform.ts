@@ -87,8 +87,8 @@ export class TuyaGatePlatform implements DynamicPlatformPlugin {
     const modePollSeconds = Number(this.config.modePollSeconds) || 120;
     // On by default — Home can notify when this motion sensor trips.
     const showRingSensor = this.config.showRingSensor !== false;
-    // On by default so you can verify Home notifications without going outside.
-    const showTestRingSwitch = this.config.showTestRingSwitch !== false;
+    // Off by default — cannot drive the physical intercom; only tests Home notifications.
+    const showTestRingSwitch = this.config.showTestRingSwitch === true;
     const ringPollSeconds = Number(this.config.ringPollSeconds) || DEFAULT_RING_POLL_SECONDS;
     const ringHoldSeconds = Number(this.config.ringHoldSeconds) || DEFAULT_RING_HOLD_SECONDS;
     const ringPush = this.config.ringPush !== false;

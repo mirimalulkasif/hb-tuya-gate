@@ -107,25 +107,19 @@ test('ring motion sensor trips when Tuya reports a visitor call', async () => {
   }
 });
 
-test('Simulate Ring switch writes to Tuya and trips motion', async () => {
-  const sims = [];
+test('Test Notify switch trips motion locally', async () => {
   const { accessories, launch, platform, shutdown } = createPlatform({
     config: { showRingSensor: true, showTestRingSwitch: true, ringPush: false },
-    simulateVisitorRing: async () => {
-      sims.push(true);
-      return { code: 'alarm_message', value: 'x' };
-    },
   });
   try {
     launch();
     await platform.ready;
     const motion = accessories[0].getServiceById(hap.Service.MotionSensor, 'gate-ring');
-    const simSwitch = accessories[0].getServiceById(hap.Service.Switch, 'simulate-ring-switch')
-      || accessories[0].getServiceById(hap.Service.Switch, 'test-ring-switch');
+    const testSwitch = accessories[0].getServiceById(hap.Service.Switch, 'test-ring-switch')
+      || accessories[0].getServiceById(hap.Service.Switch, 'simulate-ring-switch');
     assert.ok(motion);
-    assert.ok(simSwitch);
-    await setCharacteristic(simSwitch.getCharacteristic(hap.Characteristic.On), true);
-    await waitFor(() => sims.length === 1);
+    assert.ok(testSwitch);
+    await setCharacteristic(testSwitch.getCharacteristic(hap.Characteristic.On), true);
     assert.equal(motion.getCharacteristic(hap.Characteristic.MotionDetected).value, true);
   } finally {
     shutdown();
