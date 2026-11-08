@@ -9,13 +9,23 @@ import type {
 } from 'homebridge';
 
 import { GateAccessory } from './accessory';
-import { DEFAULT_LOCK_CODE, DEFAULT_REGION, PLATFORM_NAME, PLUGIN_NAME } from './settings';
+import {
+  DEFAULT_LOCK_CODE,
+  DEFAULT_MODE_CODE,
+  DEFAULT_MODE_DORMANT,
+  DEFAULT_MODE_HOME,
+  DEFAULT_MODE_OUT,
+  DEFAULT_REGION,
+  PLATFORM_NAME,
+  PLUGIN_NAME,
+} from './settings';
 import { TuyaClient } from './tuya-client';
 
 export class TuyaGatePlatform implements DynamicPlatformPlugin {
   public readonly Service: typeof Service;
   public readonly Characteristic: typeof Characteristic;
   private readonly cachedAccessories: PlatformAccessory[] = [];
+  private accessoryHandler?: GateAccessory;
   public ready: Promise<void> = Promise.resolve();
 
   constructor(
@@ -29,6 +39,10 @@ export class TuyaGatePlatform implements DynamicPlatformPlugin {
         deviceId: String(cfg.deviceId || ''),
         region: String(cfg.region || DEFAULT_REGION),
         lockCode: String(cfg.lockCode || DEFAULT_LOCK_CODE),
+        modeCode: cfg.modeCode ? String(cfg.modeCode) : undefined,
+        modeHomeValue: String(cfg.modeHomeValue || DEFAULT_MODE_HOME),
+        modeOutValue: String(cfg.modeOutValue || DEFAULT_MODE_OUT),
+        modeDormantValue: String(cfg.modeDormantValue || DEFAULT_MODE_DORMANT),
         warmupStream: cfg.warmupStream !== false,
       }),
   ) {
@@ -36,6 +50,9 @@ export class TuyaGatePlatform implements DynamicPlatformPlugin {
     this.Characteristic = api.hap.Characteristic;
     this.api.on('didFinishLaunching', () => {
       this.ready = Promise.resolve().then(() => this.start());
+    });
+    this.api.on('shutdown', () => {
+      this.accessoryHandler?.stop();
     });
   }
 
@@ -59,7 +76,15 @@ export class TuyaGatePlatform implements DynamicPlatformPlugin {
 
     const client = this.clientFactory(this.config);
     const showSwitch = this.config.showSwitch === true;
-    new GateAccessory(this, accessory, client, name, showSwitch);
+    const showModes = this.config.showModes !== false;
+    const modePollSeconds = Number(this.config.modePollSeconds) || 120;
+
+    this.accessoryHandler = new GateAccessory(this, accessory, client, {
+      displayName: name,
+      showSwitch,
+      showModes,
+      modePollSeconds,
+    });
 
     if (!existing) {
       this.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
@@ -70,7 +95,9 @@ export class TuyaGatePlatform implements DynamicPlatformPlugin {
     }
 
     this.log.info(
-      `Ready to open ${name} on device ${this.config.deviceId} (${this.config.lockCode || DEFAULT_LOCK_CODE}; ${showSwitch ? 'lock+switch' : 'lock only'})`,
+      `Ready: ${name} device=${this.config.deviceId} lock=${this.config.lockCode || DEFAULT_LOCK_CODE}`
+        + ` modes=${showModes ? `on (${this.config.modeCode || `${DEFAULT_MODE_CODE}/auto`})` : 'off'}`
+        + ` openSwitch=${showSwitch ? 'on' : 'off'}`,
     );
   }
 }

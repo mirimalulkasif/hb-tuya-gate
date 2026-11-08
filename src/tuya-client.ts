@@ -1,6 +1,16 @@
 import { createHash, createHmac, randomBytes } from 'node:crypto';
 
-import { DEFAULT_REGION, REGION_HOSTS } from './settings';
+import {
+  DEFAULT_LOCK_CODE,
+  DEFAULT_MODE_CODE,
+  DEFAULT_MODE_DORMANT,
+  DEFAULT_MODE_HOME,
+  DEFAULT_MODE_OUT,
+  DEFAULT_REGION,
+  REGION_HOSTS,
+} from './settings';
+
+export type GateMode = 'home' | 'out' | 'dormant';
 
 export interface TuyaClientOptions {
   accessId: string;
@@ -8,11 +18,22 @@ export interface TuyaClientOptions {
   deviceId: string;
   region?: string;
   lockCode?: string;
+  modeCode?: string;
+  modeHomeValue?: string;
+  modeOutValue?: string;
+  modeDormantValue?: string;
   /** Try opening a live stream before lock (needed on some intercoms). */
   warmupStream?: boolean;
   /** Injected for tests. */
   fetchImpl?: typeof fetch;
   now?: () => number;
+}
+
+export interface TuyaProperty {
+  code: string;
+  dp_id?: number;
+  value: unknown;
+  type?: string;
 }
 
 export class TuyaApiError extends Error {
@@ -31,12 +52,14 @@ interface TokenCache {
 }
 
 /**
- * Minimal Tuya OpenAPI client for Gate Camera lock open.
+ * Minimal Tuya OpenAPI client for Gate Camera lock open + indoor ring mode.
  * Video intercoms often reject /v1.0/.../commands (error 2008); use v2 shadow properties instead.
  */
 export class TuyaClient {
   private readonly host: string;
   private readonly lockCode: string;
+  private modeCode: string;
+  private readonly modeValues: Record<GateMode, string>;
   private readonly warmupStream: boolean;
   private readonly fetchImpl: typeof fetch;
   private readonly now: () => number;
@@ -45,10 +68,20 @@ export class TuyaClient {
   constructor(private readonly options: TuyaClientOptions) {
     const region = (options.region || DEFAULT_REGION).toLowerCase();
     this.host = REGION_HOSTS[region] || REGION_HOSTS[DEFAULT_REGION];
-    this.lockCode = options.lockCode || 'accessory_lock';
+    this.lockCode = options.lockCode || DEFAULT_LOCK_CODE;
+    this.modeCode = options.modeCode || DEFAULT_MODE_CODE;
+    this.modeValues = {
+      home: options.modeHomeValue || DEFAULT_MODE_HOME,
+      out: options.modeOutValue || DEFAULT_MODE_OUT,
+      dormant: options.modeDormantValue || DEFAULT_MODE_DORMANT,
+    };
     this.warmupStream = options.warmupStream !== false;
     this.fetchImpl = options.fetchImpl || fetch;
     this.now = options.now || Date.now;
+  }
+
+  getModeCode(): string {
+    return this.modeCode;
   }
 
   /** Pulses the gate/door open command (Lock Switch / accessory_lock = true). */
@@ -57,6 +90,78 @@ export class TuyaClient {
       await this.tryWarmupStream();
     }
     await this.issueProperty(this.lockCode, true);
+  }
+
+  async getProperties(codes?: string[]): Promise<TuyaProperty[]> {
+    let path = `/v2.0/cloud/thing/${this.options.deviceId}/shadow/properties`;
+    if (codes && codes.length > 0) {
+      path += `?codes=${encodeURIComponent(codes.join(','))}`;
+    }
+    const response = await this.request('GET', path);
+    if (!response.success) {
+      throw new TuyaApiError(response.msg || 'Tuya properties query failed', response.code);
+    }
+    const result = response.result as { properties?: TuyaProperty[] } | undefined;
+    return Array.isArray(result?.properties) ? result!.properties! : [];
+  }
+
+  async getMode(): Promise<GateMode | undefined> {
+    await this.ensureModeCode();
+    const properties = await this.getProperties([this.modeCode]);
+    const hit = properties.find((item) => item.code === this.modeCode);
+    if (!hit) {
+      return undefined;
+    }
+    return this.parseModeValue(hit.value);
+  }
+
+  async setMode(mode: GateMode): Promise<void> {
+    await this.ensureModeCode();
+    await this.issueProperty(this.modeCode, this.modeValues[mode]);
+  }
+
+  /**
+   * If modeCode is still the default, try to find a property whose current
+   * value looks like home/out/dormant (or common aliases).
+   */
+  async ensureModeCode(): Promise<string> {
+    if (this.options.modeCode) {
+      this.modeCode = this.options.modeCode;
+      return this.modeCode;
+    }
+    if (this.modeCode !== DEFAULT_MODE_CODE) {
+      return this.modeCode;
+    }
+    try {
+      const properties = await this.getProperties();
+      const discovered = discoverModeProperty(properties, this.modeValues);
+      if (discovered) {
+        this.modeCode = discovered;
+      }
+    } catch {
+      // Keep configured/default code; setMode may still fail with a clear error.
+    }
+    return this.modeCode;
+  }
+
+  parseModeValue(value: unknown): GateMode | undefined {
+    const raw = String(value ?? '').trim().toLowerCase();
+    for (const mode of ['home', 'out', 'dormant'] as GateMode[]) {
+      if (raw === this.modeValues[mode].toLowerCase()) {
+        return mode;
+      }
+    }
+    // Common aliases across Tuya indoor monitors.
+    if (['home', 'at_home', 'athome', '0'].includes(raw)) {
+      return 'home';
+    }
+    if (['out', 'away', 'leave_home', 'not_at_home', 'nothome', '1'].includes(raw)) {
+      return 'out';
+    }
+    if (['dormant', 'sleep', 'rest', 'dnd', '2'].includes(raw)) {
+      return 'dormant';
+    }
+    return undefined;
   }
 
   /** Preferred path for IPC / Gate Camera lock DPs. */
@@ -166,4 +271,37 @@ export class TuyaClient {
       .digest('hex')
       .toUpperCase();
   }
+}
+
+export function discoverModeProperty(
+  properties: TuyaProperty[],
+  modeValues: Record<GateMode, string>,
+): string | undefined {
+  const aliases = new Set(
+    [
+      modeValues.home,
+      modeValues.out,
+      modeValues.dormant,
+      'home',
+      'out',
+      'dormant',
+      'at_home',
+      'leave_home',
+      'not_at_home',
+      'away',
+      'sleep',
+      'rest',
+    ].map((value) => value.toLowerCase()),
+  );
+  for (const property of properties) {
+    const value = String(property.value ?? '').trim().toLowerCase();
+    if (aliases.has(value)) {
+      return property.code;
+    }
+  }
+  // Prefer an explicit-looking code even if value is unknown yet.
+  const preferred = properties.find((property) =>
+    /mode|dormant|leave_home|indoor/i.test(property.code),
+  );
+  return preferred?.code;
 }

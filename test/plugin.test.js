@@ -21,49 +21,95 @@ test('the plugin registers the Tuya Gate platform', () => {
   });
 });
 
-test('lock only by default: unlock sends openGate and no switch service', async () => {
+test('lock only open path: unlock sends openGate', async () => {
   const opens = [];
-  const { accessories, launch, platform } = createPlatform({
+  const { accessories, launch, platform, shutdown } = createPlatform({
     openGate: async () => {
       opens.push(true);
     },
+    getMode: async () => 'home',
+    setMode: async () => undefined,
   });
 
-  launch();
-  await platform.ready;
-  assert.equal(accessories.length, 1);
-  assert.equal(accessories[0].getService(hap.Service.Switch), undefined);
+  try {
+    launch();
+    await platform.ready;
+    assert.equal(accessories.length, 1);
 
-  const lock = accessories[0].getService(hap.Service.LockMechanism);
-  const target = lock.getCharacteristic(hap.Characteristic.LockTargetState);
-  await setCharacteristic(target, hap.Characteristic.LockTargetState.UNSECURED);
-  await waitFor(() => opens.length === 1);
-  await waitFor(() => target.value === hap.Characteristic.LockTargetState.SECURED);
-  assert.equal(opens.length, 1);
+    const lock = accessories[0].getService(hap.Service.LockMechanism);
+    const target = lock.getCharacteristic(hap.Characteristic.LockTargetState);
+    await setCharacteristic(target, hap.Characteristic.LockTargetState.UNSECURED);
+    await waitFor(() => opens.length === 1);
+    await waitFor(() => target.value === hap.Characteristic.LockTargetState.SECURED);
+    assert.equal(opens.length, 1);
+  } finally {
+    shutdown();
+  }
 });
 
 test('showSwitch true exposes a momentary switch that opens the gate', async () => {
   const opens = [];
-  const { accessories, launch, platform } = createPlatform({
-    config: { showSwitch: true },
+  const { accessories, launch, platform, shutdown } = createPlatform({
+    config: { showSwitch: true, showModes: false },
     openGate: async () => {
       opens.push(true);
     },
   });
 
-  launch();
-  await platform.ready;
-  const sw = accessories[0].getService('Open Gate Switch');
-  assert.ok(sw);
-  const on = sw.getCharacteristic(hap.Characteristic.On);
-  await setCharacteristic(on, true);
-  await waitFor(() => opens.length === 1);
-  assert.equal(opens.length, 1);
+  try {
+    launch();
+    await platform.ready;
+    const sw = accessories[0].getServiceById(hap.Service.Switch, 'open-gate-switch');
+    assert.ok(sw);
+    const on = sw.getCharacteristic(hap.Characteristic.On);
+    await setCharacteristic(on, true);
+    await waitFor(() => opens.length === 1);
+  } finally {
+    shutdown();
+  }
 });
 
-function createPlatform({ openGate, config = {} }) {
+test('mode switches set intercom home/out/dormant (not an alarm)', async () => {
+  const modes = [];
+  const { accessories, launch, platform, shutdown } = createPlatform({
+    config: { showModes: true },
+    openGate: async () => undefined,
+    getMode: async () => 'home',
+    setMode: async (mode) => {
+      modes.push(mode);
+    },
+  });
+
+  try {
+    launch();
+    await platform.ready;
+    const home = accessories[0].getServiceById(hap.Service.Switch, 'mode-home');
+    const out = accessories[0].getServiceById(hap.Service.Switch, 'mode-out');
+    const dormant = accessories[0].getServiceById(hap.Service.Switch, 'mode-dormant');
+    assert.ok(home);
+    assert.ok(out);
+    assert.ok(dormant);
+    assert.equal(accessories[0].getService(hap.Service.SecuritySystem), undefined);
+
+    await waitFor(() => home.getCharacteristic(hap.Characteristic.On).value === true);
+
+    await setCharacteristic(out.getCharacteristic(hap.Characteristic.On), true);
+    await waitFor(() => modes.includes('out'));
+    assert.equal(out.getCharacteristic(hap.Characteristic.On).value, true);
+    assert.equal(home.getCharacteristic(hap.Characteristic.On).value, false);
+
+    await setCharacteristic(dormant.getCharacteristic(hap.Characteristic.On), true);
+    await waitFor(() => modes.includes('dormant'));
+    assert.equal(dormant.getCharacteristic(hap.Characteristic.On).value, true);
+  } finally {
+    shutdown();
+  }
+});
+
+function createPlatform({ openGate, getMode, setMode, config = {} }) {
   const accessories = [];
   let launch = () => {};
+  let shutdown = () => {};
   const api = {
     hap,
     platformAccessory: PlatformAccessory,
@@ -74,6 +120,9 @@ function createPlatform({ openGate, config = {} }) {
     on(event, callback) {
       if (event === 'didFinishLaunching') {
         launch = callback;
+      }
+      if (event === 'shutdown') {
+        shutdown = callback;
       }
     },
   };
@@ -90,9 +139,14 @@ function createPlatform({ openGate, config = {} }) {
     deviceId: 'bf3f24408fb356db59qioh',
     region: 'eu',
     ...config,
-  }, api, () => ({ openGate }));
+  }, api, () => ({
+    openGate: openGate || (async () => undefined),
+    getMode: getMode || (async () => 'home'),
+    setMode: setMode || (async () => undefined),
+    getModeCode: () => 'mode',
+  }));
 
-  return { accessories, launch, platform };
+  return { accessories, launch, platform, shutdown };
 }
 
 function setCharacteristic(characteristic, value) {

@@ -2,8 +2,8 @@
   "pluginAlias": "TuyaGate",
   "pluginType": "platform",
   "singular": true,
-  "headerDisplay": "Opens a Tuya Gate Camera / video intercom from HomeKit by pulsing accessory_lock (DP 148). By default Home only shows a Lock (Unlock = open). Optionally add a momentary Switch for the same action.",
-  "footerDisplay": "Tip: Keep “Show open switch” off for a cleaner Home screen. Turn it on if you prefer a switch tile for automations. Both controls send the same Tuya open command.",
+  "headerDisplay": "Opens a Tuya Gate Camera / video intercom from HomeKit (accessory_lock). Optionally expose Home / Out / Dormant switches for the indoor monitor ring mode (same as the Tuya app — not an alarm panel).",
+  "footerDisplay": "Tip: Leave “Show open switch” off for a cleaner Home screen. Mode switches mirror the intercom’s Home / Out / Dormant ringing behaviour.",
   "schema": {
     "type": "object",
     "properties": {
@@ -12,7 +12,7 @@
         "type": "string",
         "default": "Open Gate",
         "required": true,
-        "description": "Label for the lock (and optional switch) in the Home app."
+        "description": "Label for the lock (and optional controls) in the Home app."
       },
       "accessId": {
         "title": "Access ID / Client ID",
@@ -51,19 +51,55 @@
         "title": "Lock DP code",
         "type": "string",
         "default": "accessory_lock",
-        "description": "Tuya property code for the gate open pulse. Default accessory_lock (DP 148). Use ipc_c_lock for a second lock channel if needed."
+        "description": "Tuya property code for the gate open pulse. Default accessory_lock (DP 148)."
       },
       "showSwitch": {
         "title": "Show open switch",
         "type": "boolean",
         "default": false,
-        "description": "Off (default): only a Lock in Home — Unlock opens the gate. On: also add a momentary Switch that does the same open pulse (useful for some automations)."
+        "description": "Off (default): only a Lock in Home — Unlock opens the gate. On: also add a momentary Switch for the same open pulse."
+      },
+      "showModes": {
+        "title": "Show Home / Out / Dormant modes",
+        "type": "boolean",
+        "default": true,
+        "description": "On (default): three switches for the intercom ring mode (Home rings indoors, Out / Dormant follow the Tuya app behaviour). Not a security alarm."
+      },
+      "modeCode": {
+        "title": "Mode DP code (optional)",
+        "type": "string",
+        "description": "Tuya property code for indoor mode. Leave blank to auto-detect from device properties. Set explicitly if auto-detect fails (from shadow/properties)."
+      },
+      "modeHomeValue": {
+        "title": "Home mode value",
+        "type": "string",
+        "default": "home",
+        "description": "Exact enum/string the device expects for Home (ring)."
+      },
+      "modeOutValue": {
+        "title": "Out mode value",
+        "type": "string",
+        "default": "out",
+        "description": "Exact value for Out / not-at-home."
+      },
+      "modeDormantValue": {
+        "title": "Dormant mode value",
+        "type": "string",
+        "default": "dormant",
+        "description": "Exact value for Dormant / silent indoor."
+      },
+      "modePollSeconds": {
+        "title": "Mode refresh interval (seconds)",
+        "type": "integer",
+        "default": 120,
+        "minimum": 30,
+        "description": "How often to re-read the current mode from Tuya (if changed in the app)."
       },
       "warmupStream": {
         "title": "Warm up camera stream before open",
         "type": "boolean",
         "default": true,
-        "description": "Some Gate Cameras only accept accessory_lock after a short live-stream allocate. Leave on unless open works without it."
+        "description": "Some Gate Cameras only accept accessory_lock after a short live-stream allocate."
       }
     }
   }
