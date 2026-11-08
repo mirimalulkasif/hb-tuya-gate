@@ -151,11 +151,11 @@ export class TuyaClient {
         return mode;
       }
     }
-    // Common aliases across Tuya indoor monitors.
-    if (['home', 'at_home', 'athome', '0'].includes(raw)) {
+    // Common aliases across Tuya indoor monitors / app labels.
+    if (['home', 'at_home', 'athome', 'at home', '0'].includes(raw)) {
       return 'home';
     }
-    if (['out', 'away', 'leave_home', 'not_at_home', 'nothome', '1'].includes(raw)) {
+    if (['out', 'away', 'leave_home', 'not_at_home', 'nothome', 'not at home', '1'].includes(raw)) {
       return 'out';
     }
     if (['dormant', 'sleep', 'rest', 'dnd', '2'].includes(raw)) {
@@ -286,8 +286,10 @@ export function discoverModeProperty(
       'out',
       'dormant',
       'at_home',
+      'at home',
       'leave_home',
       'not_at_home',
+      'not at home',
       'away',
       'sleep',
       'rest',

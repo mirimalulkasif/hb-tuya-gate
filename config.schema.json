@@ -2,8 +2,8 @@
   "pluginAlias": "TuyaGate",
   "pluginType": "platform",
   "singular": true,
-  "headerDisplay": "Opens a Tuya Gate Camera / video intercom from HomeKit (accessory_lock). Optionally expose Home / Out / Dormant switches for the indoor monitor ring mode (same as the Tuya app — not an alarm panel).",
-  "footerDisplay": "Tip: Leave “Show open switch” off for a cleaner Home screen. Mode switches mirror the intercom’s Home / Out / Dormant ringing behaviour.",
+  "headerDisplay": "Opens a Tuya Gate Camera / video intercom from HomeKit (accessory_lock). Optionally expose At Home / Not at Home / Dormant switches for the indoor monitor ring mode (same as the Tuya app — not an alarm panel).",
+  "footerDisplay": "Tip: Leave “Show open switch” off for a cleaner Home screen. Mode switches mirror At Home / Not at Home / Dormant.",
   "schema": {
     "type": "object",
     "properties": {
@@ -60,33 +60,33 @@
         "description": "Off (default): only a Lock in Home — Unlock opens the gate. On: also add a momentary Switch for the same open pulse."
       },
       "showModes": {
-        "title": "Show Home / Out / Dormant modes",
+        "title": "Show At Home / Not at Home / Dormant",
         "type": "boolean",
         "default": true,
-        "description": "On (default): three switches for the intercom ring mode (Home rings indoors, Out / Dormant follow the Tuya app behaviour). Not a security alarm."
+        "description": "On (default): three switches matching the Tuya intercom modes. Not a security alarm."
       },
       "modeCode": {
         "title": "Mode DP code (optional)",
         "type": "string",
-        "description": "Tuya property code for indoor mode. Leave blank to auto-detect from device properties. Set explicitly if auto-detect fails (from shadow/properties)."
+        "description": "Tuya property code for indoor mode. Leave blank to auto-detect from device properties."
       },
       "modeHomeValue": {
-        "title": "Home mode value",
+        "title": "At Home value",
         "type": "string",
-        "default": "home",
-        "description": "Exact enum/string the device expects for Home (ring)."
+        "default": "at_home",
+        "description": "Exact Tuya enum/string for At Home (indoor rings)."
       },
       "modeOutValue": {
-        "title": "Out mode value",
+        "title": "Not at Home value",
         "type": "string",
-        "default": "out",
-        "description": "Exact value for Out / not-at-home."
+        "default": "not_at_home",
+        "description": "Exact Tuya enum/string for Not at Home."
       },
       "modeDormantValue": {
-        "title": "Dormant mode value",
+        "title": "Dormant value",
         "type": "string",
         "default": "dormant",
-        "description": "Exact value for Dormant / silent indoor."
+        "description": "Exact Tuya enum/string for Dormant (silent indoor)."
       },
       "modePollSeconds": {
         "title": "Mode refresh interval (seconds)",

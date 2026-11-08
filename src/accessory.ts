@@ -92,9 +92,9 @@ export class GateAccessory {
     // Distinct labels — Home often shows the accessory name ("Open Gate") for every
     // linked switch unless the service Name is clearly different.
     const modes: Array<{ mode: GateMode; subtype: string; label: string }> = [
-      { mode: 'home', subtype: 'mode-home', label: 'Intercom Home (ring)' },
-      { mode: 'out', subtype: 'mode-out', label: 'Intercom Out' },
-      { mode: 'dormant', subtype: 'mode-dormant', label: 'Intercom Dormant (silent)' },
+      { mode: 'home', subtype: 'mode-home', label: 'At Home' },
+      { mode: 'out', subtype: 'mode-out', label: 'Not at Home' },
+      { mode: 'dormant', subtype: 'mode-dormant', label: 'Dormant' },
     ];
 
     for (const entry of modes) {

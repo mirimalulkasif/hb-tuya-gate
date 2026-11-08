@@ -3,19 +3,19 @@
 Homebridge plugin for a **Tuya Gate Camera / video intercom** in Apple Home.
 
 - **Open the gate** — same action as the Tuya app **Lock Switch** (`accessory_lock` via v2 shadow properties)
-- **Ring modes** — **Home / Out / Dormant** switches matching the indoor monitor (who rings / stays silent). This is **not** a security alarm panel.
+- **Ring modes** — **At Home / Not at Home / Dormant** (same as the Tuya app). This is **not** a security alarm panel.
 
 ## What you get in Home
 
 - **Lock** (always) — Unlock opens the gate, then returns to Locked
-- **Intercom Home (ring)** / **Intercom Out** / **Intercom Dormant (silent)** — ring mode (default on)
+- **At Home** / **Not at Home** / **Dormant** — ring mode (default on)
 - **Switch** (optional) — momentary open pulse; enable with `showSwitch`
 
 | Switch | Typical behaviour (Tuya app) |
 |--------|------------------------------|
-| **Intercom Home (ring)** | Indoor monitor rings; app notified |
-| **Intercom Out** | Visitor prompted / message; app notified |
-| **Intercom Dormant (silent)** | Indoor silent; app can still get the call |
+| **At Home** | Indoor monitor rings; app notified |
+| **Not at Home** | Visitor prompted / message; app notified |
+| **Dormant** | Indoor silent; app can still get the call |
 
 Only one mode switch should stay on at a time.
 
@@ -62,9 +62,9 @@ Restart the plugin / child bridge, then configure **Tuya Gate**.
 
 | Option | Meaning |
 |--------|---------|
-| `showModes` | Default `true` — Home / Out / Dormant switches |
+| `showModes` | Default `true` — At Home / Not at Home / Dormant |
 | `modeCode` | Optional Tuya DP code. Leave blank to auto-detect |
-| `modeHomeValue` / `modeOutValue` / `modeDormantValue` | Exact enum strings if your device differs (`home` / `out` / `dormant`) |
+| `modeHomeValue` / `modeOutValue` / `modeDormantValue` | Defaults `at_home` / `not_at_home` / `dormant` — override if Query properties shows different strings |
 | `showSwitch` | Extra momentary open switch |
 | `warmupStream` | Allocate RTSP before open (helps some cameras) |
 
